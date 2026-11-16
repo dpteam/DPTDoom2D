@@ -40,8 +40,17 @@ namespace Doom2D
 
             Wad.Startup();
             Wad.AddWad(System.IO.Path.Combine(Program.DataDirectory, "doom2d.wad"));
+            for (int i = 0; i < Config.ExtraWads.Count; ++i)
+                if (System.IO.File.Exists(Config.ExtraWads[i])) Wad.AddWad(Config.ExtraWads[i]);
             Wad.InitWads();
             Palette.Load();
+            Palette.SetGamma(Config.Gamma);
+
+            // config.c targets: warp selects the level, mon enables monsters,
+            // fullscr starts windowed or fullscreen.
+            DGame.Warp = Config.Warp;
+            Monsters.NoMon = Config.NoMonsters;
+            Program.Fullscreen = Config.Fullscreen;
 
             base.Initialize();
         }

@@ -50,6 +50,10 @@ namespace Doom2D
         {
             DataDirectory = LocateData();
 
+            // config.c: options first, then default.cfg fills in the rest.
+            Config.ParseArgs(args);
+            Config.Load();
+
             for (int i = 0; i < args.Length; ++i)
             {
                 if (args[i] == "--dump" && i + 2 < args.Length)
@@ -104,8 +108,14 @@ namespace Doom2D
             if (!File.Exists(wad))
                 throw new Fatal("Не найден doom2d.wad (искал в " + DataDirectory + ")");
             Wad.AddWad(wad);
+
+            // -file <wad> from the command line, exactly as in files.c.
+            for (int i = 0; i < Config.ExtraWads.Count; ++i)
+                if (File.Exists(Config.ExtraWads[i])) Wad.AddWad(Config.ExtraWads[i]);
+
             Wad.InitWads();
             Palette.Load();
+            Palette.SetGamma(Config.Gamma);
         }
 
         static string LocateData()

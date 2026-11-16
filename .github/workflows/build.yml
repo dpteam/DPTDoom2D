@@ -1,0 +1,73 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: build and check
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The game data (doom2d.wad, music) is not committed: it is 6 MB of GPL
+      # assets that already live upstream. Fetch them the same way a developer
+      # would.
+      - name: Fetch Doom2D data
+        shell: pwsh
+        run: ./Doom2D/tools/fetch-data.ps1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The project targets net40, so the reference assemblies come from the
+      # Microsoft.NETFramework.ReferenceAssemblies package (restored normally).
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build Doom2D/Doom2D.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Every check here is the real game loop without a window, so it runs on a
+      # headless runner: all 19 maps, save/load round-trip, and the front end.
+      - name: Headless checks
+        shell: pwsh
+        run: ./Doom2D/tools/build.ps1 -Test
+
+      - name: Pack
+        shell: pwsh
+        run: ./Doom2D/tools/build.ps1 -Pack
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Doom2D-win64
+          path: Doom2D/dist/Doom2D
+          if-no-files-found: error
+          retention-days: 30
+
+      # Docs images are generated from the game's own framebuffer; keeping them
+      # in the artifact lets a reviewer compare a build against the committed
+      # screenshots without running anything.
+      - name: Render docs images
+        shell: pwsh
+        run: ./Doom2D/tools/make-docs-images.ps1 -OutDir "${{ runner.temp }}/docs-images"
+
+      - name: Upload docs images
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-images
+          path: ${{ runner.temp }}/docs-images
+          if-no-files-found: warn
+          retention-days: 7
