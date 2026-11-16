@@ -56,7 +56,7 @@
 ## Быстрый старт
 
 ```powershell
-git clone https://github.com/Doom2D/doom2d-xna
+git clone <адрес репозитория> doom2d-xna
 cd doom2d-xna
 ./Doom2D/tools/fetch-data.ps1     # doom2d.wad + музыка из upstream (6 МБ)
 ./Doom2D/tools/build.ps1 -Run     # собрать и запустить
@@ -117,7 +117,7 @@ Doom2D.exe --levelend 1                                # выход с уров�
 ```
 XNADoom2D/
 ├─ Doom2D/                 игра (C#)
-│  ├─ Engine/              платформенный слой: WAD, VGA, палитра, звук, ввод
+│  ├─ Engine/              платформенный слой: WAD, VGA, палитра, звук, ввод, конфиг
 │  ├─ Game/                геймплей: мир, игрок, монстры, оружие, меню
 │  ├─ Fna/                 мостик к FNA
 │  └─ tools/               сборка, упаковка, генерация иконки и картинок для доков
@@ -125,6 +125,9 @@ XNADoom2D/
 ├─ docs/                   документация и скриншоты
 └─ refs/                   исходники оригинала (не в git, см. fetch-data.ps1)
 ```
+
+Сборка самодостаточна: FNA лежит в `external/fna`, поэтому для сборки не нужен
+ни донор движка, ни интернет (кроме `fetch-data.ps1`, который тянет данные игры).
 
 ## Лицензия
 
