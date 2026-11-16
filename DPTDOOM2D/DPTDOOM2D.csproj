@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      .NET Framework 4.0 so the game runs on Windows XP SP3 and up, like the
+      original DOS game it ports. Nothing newer is needed: the whole platform
+      layer is user32 + gdi32 + winmm.
+    -->
+    <TargetFramework>net40</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dptdoom2d</AssemblyName>
+    <RootNamespace>DPTDOOM2D</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <ApplicationIcon>..\resources\dptdoom2d.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyTitle>DPT.DOOM 2D</AssemblyTitle>
+    <Product>DPT.DOOM 2D</Product>
+    <Company>DartPower Team</Company>
+    <Copyright>Copyright (C) DartPower Team. Based on Doom 2D by Prikol Software.</Copyright>
+    <Version>1.0.0</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+    <NoWarn>$(NoWarn);CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Core" />
+  </ItemGroup>
+
+  <!--
+    The master protocol is compiled into the game rather than referenced as an
+    assembly: the game ships as a single exe, and both ends of the wire format
+    must come from one source file.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DPTDOOM2D.Shared\MasterProtocol.cs" Link="Shared\MasterProtocol.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterSessionInfo.cs" Link="Shared\MasterSessionInfo.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterClient.cs" Link="Shared\MasterClient.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\Branding.cs" Link="Shared\Branding.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\PortablePaths.cs" Link="Shared\PortablePaths.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- gamma.dat is a C array initialiser; it is parsed at startup instead of transcribed. -->
+    <EmbeddedResource Include="..\refs\doom2d-rembo\src\gamma.dat" Link="Data\gamma.dat" LogicalName="DPTDOOM2D.gamma.dat" Condition="Exists('..\refs\doom2d-rembo\src\gamma.dat')" />
+    <!-- fx1sin.dat is the sine table for the screen-warp transition. -->
+    <EmbeddedResource Include="..\refs\doom2d-rembo\src\fx1sin.dat" Link="Data\fx1sin.dat" LogicalName="DPTDOOM2D.fx1sin.dat" Condition="Exists('..\refs\doom2d-rembo\src\fx1sin.dat')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Doom2D data ships next to the exe. It comes from the upstream sources in
+      refs/doom2d-rembo (see tools/fetch-data.ps1 for a fresh checkout).
+    -->
+    <None Include="..\refs\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\doom2d.wad')" />
+    <None Include="..\refs\doom2d-rembo\src\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\default.cfg')" />
+    <None Include="..\refs\doom2d-rembo\music\*" Link="Data\Music\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\music')" />
+  </ItemGroup>
+
+</Project>

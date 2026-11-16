@@ -24,39 +24,47 @@ jobs:
       # would.
       - name: Fetch Doom2D data
         shell: pwsh
-        run: ./Doom2D/tools/fetch-data.ps1
+        run: ./DPTDOOM2D/tools/fetch-data.ps1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          # The port is built and checked with the 9.0 SDK; nothing newer than
-          # C# 12 is used, so the version only has to be recent enough to know
-          # about net40 reference assemblies (which come from NuGet anyway).
+          # The port builds with the 9.0 SDK; the shipped binaries target net40
+          # so they run on Windows XP and up.
           dotnet-version: '9.0.x'
 
-      # The project targets net40, so the reference assemblies come from the
-      # Microsoft.NETFramework.ReferenceAssemblies package (restored normally).
       - name: Build
         shell: pwsh
         run: |
-          dotnet build Doom2D/Doom2D.csproj -c Release --nologo
+          dotnet build DPTDOOM2D.slnx -c Release --nologo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Every check here is the real game loop without a window, so it runs on a
-      # headless runner: all 19 maps, save/load round-trip, and the front end.
+      # headless runner: all 19 maps, save/load, the front end, and all 30 music
+      # tracks through the XM replayer.
       - name: Headless checks
         shell: pwsh
-        run: ./Doom2D/tools/build.ps1 -Test
+        run: ./DPTDOOM2D/tools/build.ps1 -SkipTests
+
+      # Two machines on one runner: a direct session, then a relayed one through
+      # a local master. This is the path players use over the internet.
+      - name: Network checks
+        shell: pwsh
+        run: |
+          ./DPTDOOM2D/tools/net-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./DPTDOOM2D/tools/relay-test.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Pack
         shell: pwsh
-        run: ./Doom2D/tools/build.ps1 -Pack
+        run: ./DPTDOOM2D/tools/build.ps1 -SkipTests -Pack
 
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: Doom2D-win64
-          path: Doom2D/dist/Doom2D
+          name: DPTDOOM2D-win
+          path: DPTDOOM2D/dist/DPTDOOM2D
           if-no-files-found: error
           retention-days: 30
 
@@ -65,7 +73,7 @@ jobs:
       # screenshots without running anything.
       - name: Render docs images
         shell: pwsh
-        run: ./Doom2D/tools/make-docs-images.ps1 -OutDir "${{ runner.temp }}/docs-images"
+        run: ./DPTDOOM2D/tools/make-docs-images.ps1 -OutDir "${{ runner.temp }}/docs-images"
 
       - name: Upload docs images
         uses: actions/upload-artifact@v4

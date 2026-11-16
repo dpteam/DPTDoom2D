@@ -6,6 +6,7 @@ dist/
 # Local run artefacts (the game writes these next to the exe)
 Storage/
 Screenshots/
+launcher.cfg
 *.bmp
 *.log
 *.user
@@ -17,8 +18,8 @@ Screenshots/
 *.DotSettings.user
 
 # Upstream sources and data, fetched by tools/fetch-data.ps1.
-# They are third-party trees (GPLv2 game sources, a decompiled game donor),
-# so they stay out of this repository.
+# They are third-party trees (GPLv2 game sources), so they stay out of this
+# repository.
 refs/
 
 # Node/tool caches some editors drop in

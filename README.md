@@ -1,13 +1,14 @@
 <div align="center">
 
-<img src="docs/images/logo.png" alt="Doom 2D" width="440">
+<img src="docs/images/logo.png" alt="DPT.DOOM 2D" width="440">
 
-**Doom 2D** (Prikol Software, 1996) — переписанный под XNA/FNA.
-Геймплей один-в-один, движок современный.
+**Doom 2D** (Prikol Software, 1996) — переписанный на нативный Win32/C#.
+Геймплей один-в-один, движок свой, без сторонних библиотек.
 
 [![build](../../actions/workflows/build.yml/badge.svg)](../../actions/workflows/build.yml)
-![platform](https://img.shields.io/badge/platform-Windows%20x64-4a7ebb)
-![framework](https://img.shields.io/badge/.NET-net40%20%2F%20FNA-512bd4)
+![platform](https://img.shields.io/badge/platform-Windows%20XP%20%E2%80%94%2011-0078D6)
+![framework](https://img.shields.io/badge/.NET-net40%20%2F%20Win32-512bd4)
+![deps](https://img.shields.io/badge/dependencies-none-success)
 ![license](https://img.shields.io/badge/license-GPLv2-9d2b2b)
 
 </div>
@@ -18,15 +19,19 @@
 
 ## Что это
 
-Оригинальный Doom2D — DOS-игра 1996 года на ассемблере и C под VGA.
-Этот репозиторий — её исходники, перенесённые на **C# + XNA/FNA**, с
-сохранением всей игровой логики: те же карты, монстры, оружие, двери, ловушки,
-сохранения. Ничего не «переосмыслено» — перенесено.
+Оригинальный Doom2D — DOS-игра 1996 года на C и ассемблере под VGA.
+Этот репозиторий — её исходники, перенесённые на **C# с нативным Win32-слоем**:
+те же карты, монстры, оружие, двери, ловушки, сохранения. Ничего не
+«переосмыслено» — перенесено.
 
-Рендер остался **программным и палитровым**: игра по-прежнему рисует в
-8-битный буфер 320×200, а XNA только показывает кадр и играет звук. Поэтому
-картинка совпадает с оригиналом пиксель в пиксель, включая затенение по
-расстоянию, дым и цвет игрока.
+**Ни одной сторонней библиотеки.** Окно — `user32`, кадр — `gdi32`, звук —
+`winmm`. Ни SDL, ни OpenGL, ни FNA, ни WebView: `dptdoom2d.exe` запускается
+на Windows XP SP3 и на Windows 11 без установки чего-либо.
+
+Рендер остался **программным и палитровым**: игра рисует в 8-битный буфер
+320×200, ровно как оригинал, а GDI показывает его с целочисленным масштабом
+1x…6x. Поэтому картинка совпадает с оригиналом пиксель в пиксель, включая
+затенение по расстоянию, дым и цвет игрока.
 
 <div align="center">
 
@@ -42,35 +47,72 @@
 - **19 уровней** оригинала, все секреты, лифты, двери, ловушки, телепорты.
 - **20 видов монстров** с полным AI: погоня, стрельба, ближний бой, оживление
   трупов архивилом, «потерянные души» из Pain Elemental.
-- **11 видов оружия**, броня, аптечки, ключи, powerup'ы, бонусы к патронам.
-- **Два игрока**: split-screen, кооператив и deathmatch, с фрагами и респауном.
+- **11 видов оружия**, броня, аптечки, ключи, powerup'ы.
+- **Два игрока**: split-screen, кооператив и deathmatch.
+- **Сеть**: lockstep по TCP, кооп и deathmatch на двух машинах, пароль,
+  мастер-сервер и **релей** — играется через NAT без проброса портов.
 - **Сохранения**: 7 слотов, формат совместим с оригиналом (`ver=3`).
+- **Музыка**: собственный плеер FastTracker 2 (XM) — все 30 треков играют.
+- **Звук**: 8-битные DMI-сэмплы, свой микшер, вывод через `waveOut`.
+- **Оверлей по F2**: монитор (fps, карта, монстры, музыка) и настройки
+  (масштаб, яркость, громкости, трек, полный экран) — прямо в игре.
 - **Читы** оригинала: `IDDQD`, `RAMBO`, `TANK`, `BULLFROG`, `FORMULA1`,
-  `UJHTW` (бессмертие), `,TKSQJHTK` (полёт), `CBVCBV` (открыть всё), `GOODBYE`.
-- **Звук**: 8-битные DMI-сэмплы конвертируются в `SoundEffect` на лету.
+  `UJHTW`, `,TKSQJHTK`, `CBVCBV`, `GOODBYE`.
 
 <table>
 <tr><td><img src="docs/images/menu.png" width="420"></td><td><img src="docs/images/intermission.png" width="420"></td></tr>
+<tr><td><img src="docs/images/overlay.png" width="420"></td><td><img src="docs/images/launcher.png" width="420"></td></tr>
 </table>
 
 ## Быстрый старт
 
 ```powershell
-git clone <адрес репозитория> doom2d-xna
-cd doom2d-xna
-./Doom2D/tools/fetch-data.ps1     # doom2d.wad + музыка из upstream (6 МБ)
-./Doom2D/tools/build.ps1 -Run     # собрать и запустить
+git clone https://github.com/dpteam/DPTDoom2D
+cd DPTDoom2D
+./DPTDOOM2D/tools/fetch-data.ps1     # doom2d.wad + музыка из upstream (6 МБ)
+./DPTDOOM2D/tools/build.ps1 -Run     # собрать и запустить
 ```
 
-Нужен [.NET SDK](https://dotnet.microsoft.com/download) (9.0 или новее) и
-Windows x64. FNA-исходники и нативные библиотеки лежат в репозитории, так что
-больше ничего скачивать не надо.
+Нужен [.NET SDK](https://dotnet.microsoft.com/download) (9.0 или новее) для
+сборки и Windows x64 для запуска. Больше ничего скачивать не надо.
 
 Готовая сборка без SDK:
 
 ```powershell
-./Doom2D/tools/build.ps1 -Pack    # dist/Doom2D/ — копируется куда угодно
+./DPTDOOM2D/tools/build.ps1 -Pack    # dist/DPTDOOM2D/ — копируется куда угодно
 ```
+
+В `dist/` лежат три программы:
+
+| Файл | Что |
+|---|---|
+| `dptdoom2d.exe` | игра |
+| `dptdoom2d-launcher.exe` | лаунчер: режим, карта, масштаб, сеть |
+| `dptdoom2d-master.exe` | мастер-сервер + релей для игры через интернет |
+
+## Сетевая игра
+
+**По локальной сети** — хост ждёт, гость подключается по адресу:
+
+```powershell
+dptdoom2d.exe -net host -port 5030 -map 1
+dptdoom2d.exe -net join -address 192.168.1.10 -port 5030
+```
+
+**Через интернет** — мастер и релей, проброс портов не нужен:
+
+```powershell
+dptdoom2d-master.exe --port 25135 --relay-port 25136
+dptdoom2d.exe -net host -master 1.2.3.4:25135 -relay
+dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
+```
+
+Хост печатает 32-символьный id сессии; его и передают гостю. Обе машины
+подключаются наружу, поэтому играется из-за любого NAT.
+
+Сеть — **lockstep**: обе машины считают один и тот же мир с одним зерном ГПСЧ,
+по проводу идёт только ввод (4 байта на тик) и контрольная сумма мира. Если
+суммы разойдутся, игра пишет `DESYNC` и номер тика, а не тихо расходится.
 
 ## Управление
 
@@ -83,19 +125,20 @@ Windows x64. FNA-исходники и нативные библиотеки л�
 | Использовать / открыть | `8` | `E` |
 | Смена оружия | `Home` `End` | `1` `2` |
 
-`Esc` — меню, `F1` — скриншот, `F2` — сохранить, `F3` — загрузить,
-`F4` — громкость, `F5` — яркость, `F10` — выход.
+`Esc` — меню, **`F2` — оверлей**, `F1` — скриншот, `F3` — громкость,
+`F4` — яркость, `F6` — сохранить, `F7` — загрузить, `F10` — выход.
 
 ## Документация
 
 | Документ | О чём |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | как устроен порт: слои, рендер, соответствие модулей C → C# |
-| [docs/FORMATS.md](docs/FORMATS.md) | форматы данных: WAD, спрайты, карты, сохранения, DMI |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | слои, нативный Win32-слой, соответствие модулей C → C# |
+| [docs/FORMATS.md](docs/FORMATS.md) | WAD, спрайты, карты, сохранения, DMI, XM |
 | [docs/BUILDING.md](docs/BUILDING.md) | сборка, упаковка, CI, проверки без окна |
-| [docs/CONTROLS.md](docs/CONTROLS.md) | управление и читы подробно |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | что осталось: музыкальный плеер XM и прочее |
-| [docs/PORTING.md](docs/PORTING.md) | журнал портирования: решения и порядок работы |
+| [docs/NETWORK.md](docs/NETWORK.md) | протокол, lockstep, мастер, релей |
+| [docs/CONTROLS.md](docs/CONTROLS.md) | управление, оверлей, читы |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | что осталось |
+| [docs/PORTING.md](docs/PORTING.md) | журнал портирования: решения и грабли |
 
 ## Проверка
 
@@ -103,31 +146,35 @@ Windows x64. FNA-исходники и нативные библиотеки л�
 тесты. Кадр при этом сбрасывается в BMP, так что результат видно глазами:
 
 ```powershell
-Doom2D.exe --simulate 300 out.bmp 1 "5:right,40:fire"  # 300 тиков на карте 1
-Doom2D.exe --shell 140 out.bmp "5:space,20:enter,40:space"  # титул → меню → игра
-Doom2D.exe --saveload 150                              # save/load, сверка состояния
-Doom2D.exe --levelend 1                                # выход с уровня → интермиссия
+dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire"   # 300 тиков на карте 1
+dptdoom2d.exe --shell 140 out.bmp "5:space,20:enter"       # титул → меню → игра
+dptdoom2d.exe --saveload 150                               # save/load, сверка состояния
+dptdoom2d.exe --levelend 1                                 # выход с уровня → интермиссия
+dptdoom2d.exe --music MENU                                 # разбор и рендер трека
 ```
 
-`tools/build.ps1 -Test` прогоняет все 19 карт, сохранения и фронтенд — это же
-делает CI на каждый push.
+`tools/build.ps1` прогоняет все 19 карт, сохранения, фронтенд и все 30 треков;
+`-Net` добавляет проверку сети и релея. Это же делает CI на каждый push.
 
 ## Структура
 
 ```
-XNADoom2D/
-├─ Doom2D/                 игра (C#)
-│  ├─ Engine/              платформенный слой: WAD, VGA, палитра, звук, ввод, конфиг
+DPTDoom2D/
+├─ DPTDOOM2D/              игра (C#)
+│  ├─ Engine/              платформа: WAD, VGA, палитра, ввод, конфиг
+│  ├─ Audio/               свой микшер, waveOut, XM-плеер
+│  ├─ Win32/               окно, DIB-блиттер, Win32-объявления
 │  ├─ Game/                геймплей: мир, игрок, монстры, оружие, меню
-│  ├─ Fna/                 мостик к FNA
-│  └─ tools/               сборка, упаковка, генерация иконки и картинок для доков
-├─ external/fna/           FNA (Ms-PL) + нативные DLL
+│  ├─ Net/                 lockstep, протокол, мост к игре
+│  ├─ Ui/                  оверлей по F2
+│  └─ tools/               сборка, упаковка, иконка, картинки, тесты сети
+├─ DPTDOOM2D.Shared/       протокол мастера (общий для игры и сервера)
+├─ DPTDOOM2D.Master/       мастер-сервер + релей
+├─ DPTDOOM2D.Launcher/     лаунчер
 ├─ docs/                   документация и скриншоты
+├─ resources/              иконка
 └─ refs/                   исходники оригинала (не в git, см. fetch-data.ps1)
 ```
-
-Сборка самодостаточна: FNA лежит в `external/fna`, поэтому для сборки не нужен
-ни донор движка, ни интернет (кроме `fetch-data.ps1`, который тянет данные игры).
 
 ## Лицензия
 
@@ -135,7 +182,7 @@ XNADoom2D/
 распространяется под GPLv2. Полный текст в [LICENSE](LICENSE).
 
 Игровые данные (`doom2d.wad`, музыка) в репозиторий не входят и берутся из
-upstream. FNA — Microsoft Public License, см. [external/fna/LICENSE](external/fna/LICENSE).
+upstream.
 
 Оригинальные авторы Doom2D: Алексей Волынсков (движок), Владимир Калинин
 (звук, уровни), Евгений Ковтунов (графика), Prikol Software, 1996.

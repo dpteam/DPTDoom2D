@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0-windows</TargetFrameworks>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>dptdoom2d-launcher</AssemblyName>
+    <RootNamespace>DPTDOOM2D.Launcher</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyTitle>DPT.DOOM 2D Launcher</AssemblyTitle>
+    <Product>DPT.DOOM 2D</Product>
+    <Company>DartPower Team</Company>
+    <Copyright>Copyright (C) DartPower Team.</Copyright>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>..\resources\dptdoom2d.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net40'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DPTDOOM2D.Shared\DPTDOOM2D.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
