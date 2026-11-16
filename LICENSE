@@ -284,16 +284,14 @@ DAMAGES.
 
 Notes on the third-party parts
 
-  * FNA (external/fna/) is Microsoft Public License (Ms-PL); its license text is
-    in external/fna/LICENSE.  The Ms-PL is compatible with the GPL: FNA is
-    included as a separate component, its sources are unmodified, and the whole
-    is distributed under the GPL.
+  * This port has no third-party runtime dependencies. The window, the frame
+    blitter and the audio output are written against user32, gdi32 and winmm,
+    which are part of Windows.
 
-  * The Doom2D game data (doom2d.wad, music) is not part of this repository.  It
-    comes from the upstream Doom2D:Rembo sources, which are GPLv2 as well.  See
-    Doom2D/tools/fetch-data.ps1.
+  * The Doom2D game data (doom2d.wad, music) is not part of this repository. It
+    comes from the upstream Doom2D:Rembo sources, which are GPLv2 as well. See
+    DPTDOOM2D/tools/fetch-data.ps1.
 
-  * The native FNA libraries (SDL2, FNA3D, FAudio, libtheorafile) are separate
-    binaries with their own licenses: SDL2 is zlib, FNA3D is Ms-PL, FAudio is
-    zlib, libtheorafile is a port of libvorbis/theora (BSD-like).  They are not
-    distributed with this repository.
+  * The original Doom2D was written by Aleksey Volynskov, Vladimir Kalinin and
+    Eugeniy Kovtunov (Prikol Software, 1996). Doom2D:Rembo was ported to Linux
+    by <ARembo@gmail.com> in 2011.
