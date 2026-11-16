@@ -62,7 +62,7 @@ cd doom2d-xna
 ./Doom2D/tools/build.ps1 -Run     # собрать и запустить
 ```
 
-Нужен [.NET SDK](https://dotnet.microsoft.com/download) (8.0 или новее) и
+Нужен [.NET SDK](https://dotnet.microsoft.com/download) (9.0 или новее) и
 Windows x64. FNA-исходники и нативные библиотеки лежат в репозитории, так что
 больше ничего скачивать не надо.
 

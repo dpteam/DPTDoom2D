@@ -3,7 +3,7 @@
 ## Что нужно
 
 - Windows x64
-- [.NET SDK](https://dotnet.microsoft.com/download) 8.0 или новее
+- [.NET SDK](https://dotnet.microsoft.com/download) 9.0 или новее
   (собирает проект под `net40` через reference assemblies из NuGet)
 - Больше ничего: FNA-исходники и нативные DLL уже в репозитории
 

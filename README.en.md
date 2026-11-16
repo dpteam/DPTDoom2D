@@ -21,7 +21,7 @@ refs/                   upstream Doom2D sources (not committed)
 ./Doom2D/tools/build.ps1 -Run     # build and start
 ```
 
-Requires the .NET SDK (8.0+) and Windows x64. FNA sources and native libraries
+Requires the .NET SDK (9.0+) and Windows x64. FNA sources and native libraries
 are vendored, so nothing else is downloaded.
 
 ```powershell
