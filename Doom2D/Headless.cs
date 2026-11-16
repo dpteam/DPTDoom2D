@@ -14,9 +14,15 @@ namespace Doom2D
     /// </summary>
     public static class Headless
     {
+        /// <summary>
+        /// Fixed seed for every headless run: a given command always produces the
+        /// same frames, so the documentation images and the CI checks are stable.
+        /// </summary>
+        public const int Seed = 20261117;
         /// <summary>--simulate &lt;ticks&gt; &lt;out.bmp&gt; [map] [keys] [2p|dm]</summary>
         public static int Run(int ticks, string output, int map, string keys, bool twoPl = false, bool dm = false)
         {
+            Glob.Reset(Seed);
             Vga.Init(320, 200);
             Vga.SetRect(0, 320, 0, 200);
 
@@ -61,6 +67,7 @@ namespace Doom2D
         /// <summary>--shell &lt;ticks&gt; &lt;out.bmp&gt; [keys]: the front end, from the title screen.</summary>
         public static int Shell(int ticks, string output, string keys)
         {
+            Glob.Reset(Seed);
             Vga.Init(320, 200);
             Vga.SetRect(0, 320, 0, 200);
 
@@ -92,6 +99,7 @@ namespace Doom2D
         /// <summary>--saveload &lt;ticks&gt;: play, save, quit, load, verify the state survives.</summary>
         public static int SaveLoad(int ticks)
         {
+            Glob.Reset(Seed);
             Vga.Init(320, 200);
             Vga.SetRect(0, 320, 0, 200);
 
@@ -135,6 +143,7 @@ namespace Doom2D
         /// <summary>--levelend &lt;map&gt;: stand on the exit switch and confirm the map changes.</summary>
         public static int LevelEnd(int map)
         {
+            Glob.Reset(Seed);
             Vga.Init(320, 200);
             Vga.SetRect(0, 320, 0, 200);
 
@@ -175,6 +184,7 @@ namespace Doom2D
         /// <summary>--switches &lt;map&gt;: every switch the map defines.</summary>
         public static int SwitchList(int map)
         {
+            Glob.Reset(Seed);
             Vga.Init(320, 200);
             Vga.SetRect(0, 320, 0, 200);
 

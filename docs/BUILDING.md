@@ -47,7 +47,7 @@ Doom2D.exe
 Doom2D.exe.config
 SDL2.dll  FNA3D.dll  FAudio.dll  libtheorafile.dll
 Data/doom2d.wad  Data/default.cfg  Data/Music/*.xm-подобные
-README.md
+README.md  LICENSE  CHANGELOG.md
 ```
 
 Папку можно копировать на любую Windows-машину с .NET Framework 4.0
@@ -91,6 +91,11 @@ Doom2D.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 
 `--saveload` играет, сохраняет, обнуляет мир, загружает и сверяет координаты,
 патроны, жизни и фраги. Возвращает код 1 при расхождении — годится для CI.
+
+Все headless-режимы пересеивают генератор случайных чисел фиксированным зерном
+(`Headless.Seed`), поэтому одна и та же команда всегда даёт один и тот же кадр.
+На этом держатся и проверки в CI, и скриншоты в `docs/images`: их можно
+перегенерировать и увидеть настоящий diff, если что-то изменилось.
 
 ## CI
 

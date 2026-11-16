@@ -9,7 +9,17 @@ namespace Doom2D.Engine
         public const int Delay = 50;
 
         /// <summary>myrand(a) — rand()%a from the original.</summary>
-        static readonly Random rng = new Random();
+        static Random rng = new Random();
+
+        /// <summary>
+        /// Reseeds the generator. Headless runs use a fixed seed so a given
+        /// command always produces the same frames — that is what makes the
+        /// documentation screenshots and the CI checks reproducible.
+        /// </summary>
+        public static void Reset(int seed)
+        {
+            rng = new Random(seed);
+        }
 
         public static int Rand(int a)
         {

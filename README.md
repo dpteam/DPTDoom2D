@@ -5,7 +5,7 @@
 **Doom 2D** (Prikol Software, 1996) — переписанный под XNA/FNA.
 Геймплей один-в-один, движок современный.
 
-[![build](https://github.com/Doom2D/doom2d-xna/actions/workflows/build.yml/badge.svg)](../../actions/workflows/build.yml)
+[![build](../../actions/workflows/build.yml/badge.svg)](../../actions/workflows/build.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20x64-4a7ebb)
 ![framework](https://img.shields.io/badge/.NET-net40%20%2F%20FNA-512bd4)
 ![license](https://img.shields.io/badge/license-GPLv2-9d2b2b)

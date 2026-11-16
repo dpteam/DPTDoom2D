@@ -139,6 +139,9 @@ try
 		}
 		Copy-Item (Join-Path $output 'Data') (Join-Path $dist 'Data') -Recurse
 		Copy-Item (Join-Path $root 'README.md') $dist
+		# GPLv2 requires the license to travel with the binaries.
+		Copy-Item (Join-Path $root '..\LICENSE') $dist
+		Copy-Item (Join-Path $root '..\CHANGELOG.md') $dist
 		Write-Host "   $dist" -ForegroundColor Green
 	}
 
