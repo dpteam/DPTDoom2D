@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+dist/
+
+# Local run artefacts (the game writes these next to the exe)
+Storage/
+Screenshots/
+*.bmp
+*.log
+
+# Third-party trees, fetched separately:
+#   TerrariaXDK  - engine donor (FNA sources + native DLLs)
+#   doom2d-rembo - the original Doom2D sources, data and music
+TerrariaXDK/
+doom2d-rembo/
+
+# Editor / IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user

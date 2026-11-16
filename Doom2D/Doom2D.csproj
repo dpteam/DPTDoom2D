@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Doom2D</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net40</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <RootNamespace>Doom2D</RootNamespace>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+    <!-- The framework sources live in the TerrariaXDK donor tree; they are linked, not copied. -->
+    <NoWarn>$(NoWarn);CS0162;CS0168;CS0169;CS0219;CS0414;CS0618;CS0649;CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- FNA (the XNA reimplementation TerrariaXDK is built on). -->
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework\**\*.cs" Link="FNA\Microsoft.Xna.Framework\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Graphics\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.PackedVector\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Graphics.PackedVector\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Audio\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Audio\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Media\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Media\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Content\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Content\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Input\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Input\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Input.Touch\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Input.Touch\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Storage\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Storage\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Design\**\*.cs" Link="FNA\Microsoft.Xna.Framework.Design\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.GamerServices\**\*.cs" Link="FNA\Microsoft.Xna.Framework.GamerServices\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\MonoGame.Utilities\**\*.cs" Link="FNA\MonoGame.Utilities\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\ObjCRuntime\**\*.cs" Link="FNA\ObjCRuntime\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\SDL2\**\*.cs" Link="FNA\SDL2\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\TerrariaXDK\Source\FAudio.cs" Link="FNA\FAudio.cs" />
+    <Compile Include="..\TerrariaXDK\Source\Theorafile.cs" Link="FNA\Theorafile.cs" />
+    <Compile Include="..\TerrariaXDK\Source\CRC32Helper.cs" Link="FNA\CRC32Helper.cs" />
+    <Compile Include="..\TerrariaXDK\Source\ToStringExtensions.cs" Link="FNA\ToStringExtensions.cs" />
+    <Compile Include="..\TerrariaXDK\Source\StorageDeviceManager.cs" Link="FNA\StorageDeviceManager.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Compiled stock-effect blobs. FNA's Resources.GetResource() asks for exactly
+         "Microsoft.Xna.Framework.Graphics.Effect.Resources.<Name>.fxb", so each one
+         needs that logical name; the files themselves already carry the prefix. -->
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.AlphaTestEffect.fxb" Link="FNA\Effects\AlphaTestEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.AlphaTestEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.BasicEffect.fxb" Link="FNA\Effects\BasicEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.BasicEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.DualTextureEffect.fxb" Link="FNA\Effects\DualTextureEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.DualTextureEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.EnvironmentMapEffect.fxb" Link="FNA\Effects\EnvironmentMapEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.EnvironmentMapEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.SkinnedEffect.fxb" Link="FNA\Effects\SkinnedEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.SkinnedEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.SpriteEffect.fxb" Link="FNA\Effects\SpriteEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.SpriteEffect.fxb" />
+    <EmbeddedResource Include="..\TerrariaXDK\Source\Microsoft.Xna.Framework.Graphics.Effect.Resources.YUVToRGBAEffect.fxb" Link="FNA\Effects\YUVToRGBAEffect.fxb" LogicalName="Microsoft.Xna.Framework.Graphics.Effect.Resources.YUVToRGBAEffect.fxb" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- gamma.dat is a C array initialiser; it is parsed at startup instead of transcribed. -->
+    <EmbeddedResource Include="..\doom2d-rembo\src\gamma.dat" Link="Data\gamma.dat" LogicalName="Doom2D.gamma.dat" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Doom2D data ships next to the exe (see tools\build.ps1). -->
+    <None Include="..\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\doom2d-rembo\src\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\doom2d-rembo\music\*" Link="Data\Music\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
