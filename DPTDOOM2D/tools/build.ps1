@@ -190,8 +190,8 @@ try
 			Set-Content (Join-Path $modSrc 'actors.txt') 'actor Zombie { health 500 }' -Encoding ASCII
 			Remove-Item $modPk3 -Force -ErrorAction SilentlyContinue
 			& $exe --modbuild $modPk3 $modSrc 2>&1 | Out-Null
-			$output = & $exe -file $modPk3 --simulate 10 (Join-Path $tmp 'actmod.bmp') 1 2>&1 | Out-String
-			if ($LASTEXITCODE -ne 0 -or $output -notmatch 'wad:ACTORDEF') {
+			$actorLog = & $exe -file $modPk3 --simulate 10 (Join-Path $tmp 'actmod.bmp') 1 2>&1 | Out-String
+			if ($LASTEXITCODE -ne 0 -or $actorLog -notmatch 'wad:ACTORDEF') {
 				Write-Host '  actors in pk3 FAILED' -ForegroundColor Red; $failed++
 			}
 			else { Write-Host '  mod kit ok' -ForegroundColor DarkGray }
