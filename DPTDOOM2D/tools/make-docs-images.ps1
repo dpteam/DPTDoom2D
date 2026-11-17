@@ -193,6 +193,23 @@ if (Test-Path $launcher)
 	{
 		if (-not $servers.HasExited) { $servers.Kill() }
 	}
+
+	# The prototype showcase, same mechanism.
+	$env:DPTDOOM2D_LAUNCHER_TAB = 'protos'
+	$protos = Start-Process -FilePath $launcher -PassThru
+	$env:DPTDOOM2D_LAUNCHER_TAB = $null
+	try
+	{
+		Start-Sleep -Seconds 4
+		& powershell -ExecutionPolicy Bypass -File $shot -ProcessId $protos.Id `
+			-Out (Join-Path $OutDir 'launcher-protos.png') -WindowTitle 'DPT.DOOM 2D Launcher' `
+			-DelayMs 1200 -Width 1000 -Height 900 | Out-Null
+		Write-Host '  launcher-protos.png'
+	}
+	finally
+	{
+		if (-not $protos.HasExited) { $protos.Kill() }
+	}
 }
 
 Write-Host '== done' -ForegroundColor Green

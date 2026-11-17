@@ -72,6 +72,7 @@
 <tr><td><img src="docs/images/menu.png" width="420"></td><td><img src="docs/images/intermission.png" width="420"></td></tr>
 <tr><td><img src="docs/images/overlay.png" width="420"></td><td><img src="docs/images/launcher.png" width="420"></td></tr>
 <tr><td><img src="docs/images/launcher-servers.png" width="420"></td><td><img src="docs/images/launcher-mods.png" width="420"></td></tr>
+<tr><td colspan="2"><img src="docs/images/launcher-protos.png" width="840"><br><sub>Витрина прототипов: программы 1995-96, переписанные на C#</sub></td></tr>
 <tr><td colspan="2"><img src="docs/images/custommap.png" width="840"><br><sub>Кастомная карта из библиотеки (<code>kozak__arena.wad</code>) — deathmatch на двоих</sub></td></tr>
 </table>
 

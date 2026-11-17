@@ -34,6 +34,30 @@ function Stop-All
     foreach ($p in $processes) { if ($p -and -not $p.HasExited) { try { $p.Kill() } catch { } } }
 }
 
+<#
+    Reuses a port only once the previous run's sockets have left TIME_WAIT.
+
+    A failed run leaves the listener's port in TIME_WAIT for up to two minutes on
+    Windows, and the next run then binds the master but never gets a relay
+    connection - the check reported "the host did not answer" when the real
+    problem was the previous run. Asking for another port is simpler and faster
+    than waiting for the kernel.
+#>
+function Get-FreePort([int]$start)
+{
+    for ($port = $start; $port -lt $start + 40; ++$port)
+    {
+        $inUse = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+        if (-not $inUse) { return $port }
+    }
+
+    return $start
+}
+
+$MasterPort = Get-FreePort $MasterPort
+$RelayPort = Get-FreePort ($MasterPort + 1)
+$GamePort = Get-FreePort $GamePort
+
 try
 {
     Write-Host "== master on $MasterPort (relay $RelayPort)" -ForegroundColor Cyan

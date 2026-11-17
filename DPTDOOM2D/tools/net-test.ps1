@@ -23,6 +23,17 @@ New-Item -ItemType Directory -Path $Out -Force | Out-Null
 $hostLog = Join-Path $Out 'host.log'
 $guestLog = Join-Path $Out 'guest.log'
 
+# A previous run leaves the port in TIME_WAIT for up to two minutes, and binding
+# it again fails the check for a reason that has nothing to do with the code.
+foreach ($candidate in $Port..($Port + 40))
+{
+    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
+    {
+        $Port = $candidate
+        break
+    }
+}
+
 Write-Host "== host on port $Port" -ForegroundColor Cyan
 $hostProcess = Start-Process -FilePath $exe `
     -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1' `
