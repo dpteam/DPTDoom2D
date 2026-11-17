@@ -119,6 +119,16 @@ namespace DPTDOOM2D
                     return Headless.MidiToDmmFile(args[i + 1], args[i + 2]);
                 if (args[i] == "--wav2dmi" && i + 2 < args.Length)
                     return Headless.WavToDmiFile(args[i + 1], args[i + 2]);
+                if (args[i] == "--freedoom" && i + 2 < args.Length)
+                {
+                    Boot();
+                    return Headless.FreeDoomBuild(args[i + 1], args[i + 2]);
+                }
+                if (args[i] == "--fdcheck" && i + 1 < args.Length)
+                {
+                    Boot();
+                    return Headless.FreeDoomCheck(args[i + 1]);
+                }
                 if (args[i] == "--muscheck")
                     return Headless.MusicConvertCheck();
                 if (args[i] == "--sndcheck")

@@ -105,6 +105,8 @@ dptdoom2d.exe --muscheck
 dptdoom2d.exe --mid2dmm <in.mid> <out.dmm|out.wad>
 dptdoom2d.exe --sndcheck
 dptdoom2d.exe --wav2dmi <in.wav> <out.dmi|out.wad>
+dptdoom2d.exe --freedoom <doom.wad> <out.wad>
+dptdoom2d.exe --fdcheck <doom.wad>
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>

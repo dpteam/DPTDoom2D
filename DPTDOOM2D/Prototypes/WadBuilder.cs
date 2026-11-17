@@ -120,6 +120,16 @@ namespace DPTDOOM2D.Prototypes
         /// </summary>
         public static bool WriteLumps(string output, List<KeyValuePair<string, byte[]>> lumps)
         {
+            return WriteLumps(output, lumps, "PWAD");
+        }
+
+        /// <summary>
+        /// The same, with a chosen signature: a complete data set is an IWAD, a mod or
+        /// a single map is a PWAD. The game accepts both, but a replacement set that
+        /// calls itself IWAD is what a player expects to find.
+        /// </summary>
+        public static bool WriteLumps(string output, List<KeyValuePair<string, byte[]>> lumps, string signature)
+        {
             var offsets = new List<int>();
             var names = new List<string>();
 
@@ -128,13 +138,13 @@ namespace DPTDOOM2D.Prototypes
                 using (var stream = File.Create(output))
                 using (var writer = new BinaryWriter(stream))
                 {
-                    writer.Write(Encoding.ASCII.GetBytes("PWAD".PadRight(4)));
+                    writer.Write(Encoding.ASCII.GetBytes(signature.PadRight(4)));
                     writer.Write(0);              // entry count, patched below
                     writer.Write(0);              // directory offset, patched below
 
                     for (int i = 0; i < lumps.Count; ++i)
                     {
-                        string name = lumps[i].Key.ToUpperInvariant();
+                        string name = LumpName(lumps[i].Key);
                         if (name.Length > 8) name = name.Substring(0, 8);
 
                         byte[] data = lumps[i].Value ?? new byte[0];
@@ -153,7 +163,7 @@ namespace DPTDOOM2D.Prototypes
                         writer.Write(lumps[i].Value == null ? 0 : lumps[i].Value.Length);
 
                         byte[] lump = new byte[8];
-                        byte[] text = Encoding.ASCII.GetBytes(names[i]);
+                        byte[] text = Latin1.GetBytes(names[i]);
                         Buffer.BlockCopy(text, 0, lump, 0, Math.Min(8, text.Length));
                         writer.Write(lump);
                     }
@@ -171,6 +181,31 @@ namespace DPTDOOM2D.Prototypes
                 Console.WriteLine("wadwrite: " + Log.Describe(e));
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Lump names are bytes, not text.
+        ///
+        /// Doom2D's own data set names some of its walls in CP866, and a map refers to
+        /// them by those bytes. Encoding a name as ASCII turns every byte above 127
+        /// into '?', which silently merges those walls into one unusable lump; Latin-1
+        /// is the identity for bytes, and it is what the game's loader uses.
+        /// </summary>
+        private static readonly Encoding Latin1 = Encoding.GetEncoding(28591);
+
+        /// <summary>Uppercases a lump name without touching the bytes above 127.</summary>
+        private static string LumpName(string name)
+        {
+            if (name == null) return "";
+
+            char[] chars = name.ToCharArray();
+
+            for (int i = 0; i < chars.Length; ++i)
+                if (chars[i] >= 'a' && chars[i] <= 'z') chars[i] = (char)(chars[i] - 32);
+
+            string result = new string(chars);
+
+            return result.Length > 8 ? result.Substring(0, 8) : result;
         }
 
         private static int Write(string output, string kind, List<KeyValuePair<string, string>> entries)
@@ -220,7 +255,7 @@ namespace DPTDOOM2D.Prototypes
                         writer.Write(lengths[i]);
 
                         byte[] lump = new byte[8];
-                        byte[] text = Encoding.ASCII.GetBytes(names[i]);
+                        byte[] text = Latin1.GetBytes(names[i]);
                         Buffer.BlockCopy(text, 0, lump, 0, Math.Min(8, text.Length));
                         writer.Write(lump);
                     }

@@ -189,6 +189,19 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  sound converter FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  sound converter ok' -ForegroundColor DarkGray }
 
+		# FreeDooM2D: a Doom-format WAD becomes a data set this game can run on.
+		# The check builds it and then boots the game with it as the only WAD, which
+		# is the only way to know that a missing sprite set is not waiting at spawn.
+		$doom = Join-Path (Split-Path -Parent $root) 'refs\D2D_Also\DOOM\DOOM2.WAD'
+		if (Test-Path $doom) {
+			& $exe --fdcheck $doom 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  freedoom converter FAILED' -ForegroundColor Red; $failed++ }
+			else { Write-Host '  freedoom converter ok' -ForegroundColor DarkGray }
+		}
+		else {
+			Write-Host '  freedoom converter skipped (no refs/D2D_Also/DOOM/DOOM2.WAD)' -ForegroundColor DarkGray
+		}
+
 		# Map writer: every map in the game and in the 166 custom packs has to survive
 		# a read-write-read round trip byte for byte. The editor cannot save a map
 		# until this passes, because a writer that is "almost right" corrupts levels.

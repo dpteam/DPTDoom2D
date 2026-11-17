@@ -385,7 +385,11 @@ DMI, писателя DMM и самого генератора контента.
    `--mid2dmm <in.mid> <out.dmm|out.wad>`. Понимает формат 0 и 1, темп, note
    on/off; остальное (контроллеры, pitch bend, sysex) пропускает осознанно.
 5. **Конвертер FreeDoom**: спрайты, флэты → стены, звуки (через DMI-писатель);
-   карты и музыка — уже через MIDI → DMM.
+   карты и музыка — уже через MIDI → DMM. — **сделано**: `Engine/FreeDoom.cs`,
+   `Engine/DoomWad.cs`, `Engine/DoomGfx.cs`, `Audio/MusFile.cs`,
+   `Audio/Instruments.cs`; `--freedoom <doom.wad> <out.wad>` собирает набор,
+   `--fdcheck` грузит его как единственный WAD и прогоняет все 19 карт. Подробности
+   и лицензионная тонкость — [FREEDOOM.md](FREEDOOM.md).
 6. **Генератор AIDooM2D**: стены, спрайты, звуки, музыка, уровни; `--genwad`.
 7. **Лаунчер**: выбор набора данных и `main_wad` в конфиге.
 8. **Проверки**: каждый набор проходит `--mapcheck`, `--sounds`, `--music`,

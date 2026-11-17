@@ -57,6 +57,18 @@ namespace DPTDOOM2D.Engine
         }
 
         /// <summary>
+        /// The first WAD that was added: the data set the game is running on.
+        ///
+        /// Tools need it — the FreeDoom converter takes its sizes and its maps from
+        /// the set that is loaded, and asking the caller to repeat the path invites
+        /// the two to disagree.
+        /// </summary>
+        public static string MainWadName
+        {
+            get { return wadNames.Count > 0 ? wadNames[0] : null; }
+        }
+
+        /// <summary>
         /// Adds a WAD whose bytes are already in memory: a WAD unpacked from a PK3.
         /// <paramref name="displayName"/> is what the log and the error messages
         /// call it.

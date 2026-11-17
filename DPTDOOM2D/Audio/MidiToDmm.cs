@@ -39,12 +39,24 @@ namespace DPTDOOM2D.Audio
 
         public static DmmSong Convert(byte[] midi)
         {
-            List<MidiNote> notes = MidiFile.Read(midi);
+            return Convert(MidiFile.Read(midi), null);
+        }
 
+        /// <summary>
+        /// Converts notes that were read from somewhere else — MUS, for the FreeDoom
+        /// converter — with the instruments the caller wants them played on.
+        ///
+        /// <paramref name="instrumentForChannel"/> is indexed by MIDI channel and
+        /// returns a DMI lump name, or null for "the default". Passing null for the
+        /// array is the same as asking for one instrument on everything, which is
+        /// what a bare MIDI file gets.
+        /// </summary>
+        public static DmmSong Convert(List<MidiNote> notes, string[] instrumentForChannel)
+        {
             var song = new DmmSong();
             song.Version = 0;
 
-            if (notes.Count == 0)
+            if (notes == null || notes.Count == 0)
             {
                 song.Patterns.Add(new DmmPattern());
                 song.Orders.Add(0);
@@ -64,10 +76,25 @@ namespace DPTDOOM2D.Audio
             if (channels.Count > DmmModule.Channels)
                 channels.RemoveRange(DmmModule.Channels, channels.Count - DmmModule.Channels);
 
-            // One instrument per MIDI channel: a DMM instrument is a sample, and a
-            // MIDI program is a patch — mapping one to the other exactly is a
-            // soundfont problem, not a format problem.
-            song.Instruments.Add("DMI0001");
+            // One DMI name per DMM channel. A MIDI program is a patch and a DMI is a
+            // sample, so mapping one to the other exactly is a soundfont problem;
+            // the caller decides, and the default is a single instrument.
+            var instrumentIndex = new int[channels.Count];
+
+            for (int i = 0; i < channels.Count; ++i)
+            {
+                string name = null;
+
+                if (instrumentForChannel != null && channels[i] < instrumentForChannel.Length)
+                    name = instrumentForChannel[channels[i]];
+
+                if (string.IsNullOrEmpty(name)) name = "DMI0001";
+
+                int at = song.Instruments.IndexOf(name);
+                if (at < 0) { song.Instruments.Add(name); at = song.Instruments.Count - 1; }
+
+                instrumentIndex[i] = at + 1;
+            }
 
             // The song ends where the last note ends. Computing it as a ceiling of
             // seconds times ticks rounds 64.0000001 up to 65 and gives every pattern
@@ -106,7 +133,7 @@ namespace DPTDOOM2D.Audio
                 var on = new DmmEvent();
                 on.At = row;
                 on.Note = Math.Max(0, Math.Min(127, note.Note + 12));   // MIDI 0 is DMM 12
-                on.Instrument = 1;
+                on.Instrument = instrumentIndex[channel];
                 on.Volume = Math.Max(1, Math.Min(127, note.Velocity));
 
                 patterns[pattern].Channels[channel].Add(on);

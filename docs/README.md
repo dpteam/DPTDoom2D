@@ -10,6 +10,9 @@ Same gameplay, no third-party libraries: the window is `user32`, the frame is
 - **[NETWORK.md](NETWORK.md)** — lockstep protocol, master server, relay
 - **[BUILDING.md](BUILDING.md)** — build, packaging, CI, headless checks
 - **[CONTROLS.md](CONTROLS.md)** — keys, the F2 overlay, cheats
+- **[EDITOR.md](EDITOR.md)** — the map editor
+- **[ACTORS.md](ACTORS.md)** — the actor language for mods
+- **[FREEDOOM.md](FREEDOOM.md)** — the free data set built from FreeDoom
 - **[ROADMAP.md](ROADMAP.md)** — what is left
 - **[PORTING.md](PORTING.md)** — port log: decisions and pitfalls
 

@@ -1124,6 +1124,149 @@ namespace DPTDOOM2D
         }
 
         /// <summary>
+        /// --freedoom &lt;doom.wad&gt; &lt;out.wad&gt;: builds a free data set.
+        ///
+        /// FreeDoom is a free replacement for Doom's data, and Doom2D inherited Doom's
+        /// sprite names, font and sound names, so most of a replacement set can be made
+        /// from it. Sizes, maps and whatever Doom has no equivalent for come from the
+        /// data set the game booted on — see <see cref="Engine.FreeDoom"/>.
+        /// </summary>
+        public static int FreeDoomBuild(string doomPath, string output)
+        {
+            if (!File.Exists(doomPath))
+            {
+                Console.Error.WriteLine("freedoom: " + doomPath + " не найден");
+                return 1;
+            }
+
+            string reference = Wad.MainWadName;
+
+            if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+            {
+                Console.Error.WriteLine("freedoom: не найден набор Doom2D для размеров и карт");
+                return 1;
+            }
+
+            try
+            {
+                Engine.FreeDoom.Report report = Engine.FreeDoom.Convert(doomPath, reference, output);
+
+                Console.WriteLine("freedoom: " + Path.GetFileName(doomPath) + " -> "
+                    + Path.GetFileName(output));
+                Console.WriteLine("  " + report.Summary());
+                return 0;
+            }
+            catch (Fatal e)
+            {
+                Console.Error.WriteLine("freedoom: " + e.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// --fdcheck: builds a free data set from Doom II's own WAD and proves it works.
+        ///
+        /// The point is not that the conversion finishes — it is that the result is a
+        /// data set the game can actually run on. So the check builds it, then loads it
+        /// as the only WAD and runs every level for a few ticks with the audit on: a
+        /// missing sprite set is a Fatal at spawn, a missing glyph is only a line in the
+        /// report, so the two are counted separately.
+        /// </summary>
+        public static int FreeDoomCheck(string doomPath)
+        {
+            string temporary = Path.Combine(Path.GetTempPath(), "freedoom2d-check.wad");
+
+            try
+            {
+                if (FreeDoomBuild(doomPath, temporary) != 0) return 1;
+
+                long size = new FileInfo(temporary).Length;
+
+                // Load it the way a player would: as the only data set.
+                Wad.Startup();
+                Wad.AddWad(temporary);
+                Wad.InitWads();
+
+                int lumps = Wad.Entries.Count;
+                if (lumps < 100)
+                {
+                    Console.Error.WriteLine("fdcheck: в наборе всего " + lumps + " ламп");
+                    return 1;
+                }
+
+                Palette.Load();
+                Actors.Load();
+
+                Wad.BeginAudit();
+
+                try
+                {
+                    Glob.Reset(Seed);
+                    Vga.Init(320, 200);
+                    Vga.SetRect(0, 320, 0, 200);
+
+                    DGame.TwoPl = false;
+                    DGame.Dm = false;
+                    DGame.State = DGame.GsGame;
+
+                    DGame.Init();
+                    World.LoadLightningSounds();
+
+                    for (int map = 1; map <= 19; ++map)
+                    {
+                        int res = Wad.FindRes(string.Format("MAP{0:00}", map));
+                        if (res < 0) continue;
+
+                        DGame.Map = map;
+                        Player.Reset();
+                        DGame.Start();
+
+                        for (int tick = 0; tick < 20; ++tick)
+                        {
+                            Kbd.UpdateScripted(tick);
+                            DGame.Act();
+                        }
+                    }
+                }
+                finally
+                {
+                    Engine.ResourceAudit audit = Wad.EndAudit();
+
+                    if (audit == null) throw new Fatal("fdcheck: аудит не записался");
+
+                    int missingSprites = audit.MissingSprites;
+
+                    Console.WriteLine("fdcheck: " + (size / 1024) + " KB, " + lumps + " ламп, "
+                        + audit.Total + " запросов");
+                    Console.WriteLine("  спрайтов не хватает: " + missingSprites
+                        + ", всего не хватает: " + audit.Missing);
+
+                    if (missingSprites > 0)
+                    {
+                        List<string> missing = audit.MissingNames();
+
+                        for (int i = 0; i < missing.Count && i < 20; ++i)
+                            Console.WriteLine("    " + missing[i]);
+
+                        throw new Fatal("fdcheck: не хватает наборов спрайтов");
+                    }
+                }
+
+                Console.WriteLine("fdcheck ok");
+                return 0;
+            }
+            catch (Fatal e)
+            {
+                Console.Error.WriteLine("fdcheck: " + e.Message);
+                return 1;
+            }
+            finally
+            {
+                try { File.Delete(temporary); } catch { }
+            }
+        }
+
+        /// <summary>
         /// --wav2dmi &lt;in.wav&gt; &lt;out.dmi|out.wad&gt;: a sound file becomes a DMI lump.
         ///
         /// The counterpart of the MIDI converter: FreeDoom's sounds are WAV and
