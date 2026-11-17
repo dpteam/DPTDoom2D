@@ -16,6 +16,29 @@ Same gameplay, no third-party libraries: the window is `user32`, the frame is
 Everything except this file is in Russian; the code and its comments are in
 English, so a developer who does not read Russian can still work on it.
 
+## Map packs
+
+`Data/Maps` holds 166 community WADs from the Doom2D Deluxe era. They are in the
+native Doom2D map format (not Doom/Doom II). One pack is loaded per run:
+
+```powershell
+dptdoom2d.exe -map-pack kozak__arena.wad -warp 1 -deathmatch
+dptdoom2d.exe --maps
+```
+
+See [MAPS.md](MAPS.md) (Russian) for why maps that reference unknown textures
+still load instead of failing.
+
+## Stretch modes
+
+| Mode | Behaviour |
+|---|---|
+| `pixel` | integer scale, letterboxed — square pixels, exactly like 1996 |
+| `near` | fills the window, nearest neighbour (default) |
+| `smooth` | fills the window, bilinear |
+
+Set with `-stretch`, in the F2 overlay, or in the launcher.
+
 ## Layout
 
 | Project | Output |

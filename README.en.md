@@ -10,12 +10,13 @@ SP3 and on Windows 11 without installing anything.
 
 ```
 DPTDOOM2D/                 the game (C#, net40)
-  Engine/                  platform: WAD, framebuffer, palette, input, config
-  Audio/                   own mixer, waveOut output, FastTracker 2 (XM) replayer
+  Engine/                  platform: WAD, framebuffer, palette, input, config, logs
+  Audio/                   own mixer, waveOut output, XM replayer, DMM -> XM
   Win32/                   window, DIB blitter, Win32 declarations
   Game/                    gameplay: world, player, monsters, weapons, menu
   Net/                     two-player lockstep, protocol, game-loop bridge
   Ui/                      the F2 overlay
+  Maps/                    custom map library (166 WADs)
   tools/                   build, packaging, icon, docs images, network tests
 DPTDOOM2D.Shared/          master protocol (shared by the game and the server)
 DPTDOOM2D.Master/          session directory + relay
@@ -35,7 +36,7 @@ Requires the .NET SDK (9.0+) to build and Windows to run. Nothing else is
 downloaded.
 
 ```powershell
-./DPTDOOM2D/tools/build.ps1          # headless checks: 19 maps, saves, front end, 30 tracks
+./DPTDOOM2D/tools/build.ps1          # headless checks: 19 maps, 166 map packs, sounds, 30 tracks
 ./DPTDOOM2D/tools/build.ps1 -Net     # ... + direct and relayed network sessions
 ./DPTDOOM2D/tools/build.ps1 -Pack    # dist/DPTDOOM2D/, portable
 ```

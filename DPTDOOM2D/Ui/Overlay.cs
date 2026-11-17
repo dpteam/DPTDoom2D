@@ -4,6 +4,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using DPTDOOM2D.Engine;
 using DPTDOOM2D.Game;
 using DPTDOOM2D.Win32;
@@ -13,12 +14,19 @@ namespace DPTDOOM2D.Ui
 {
     /// <summary>
     /// The F2 overlay: a monitor plus the settings that are worth changing while
-    /// playing (scale, gamma, volumes, music track, fullscreen).
+    /// playing (scale, stretch mode, gamma, volumes, music track, fullscreen).
     ///
     /// Modelled on NesLifter's overlay: tabs along the top, arrows to move and
     /// change, F2 to close. The Monitor tab is passive — you can watch it while
     /// still playing — every other tab takes the keyboard so an arrow key changes
     /// a setting instead of moving the player.
+    ///
+    /// The layout is computed from the client size on every frame rather than
+    /// fixed: at 1x the window is only 320x200, so the panel fills it edge to
+    /// edge and the font drops a couple of points; on a 6x window the same code
+    /// centres a comfortable 560x380 box. Text is measured with GDI and centred
+    /// inside its tab, and every value is right-aligned, so nothing is ever
+    /// clipped by a guessed column width.
     ///
     /// Settings write straight into the running game, so there is no "apply"
     /// step and no chance of the overlay and the engine disagreeing.
@@ -37,8 +45,12 @@ namespace DPTDOOM2D.Ui
         public bool ShowFps = true;
         public bool Fullscreen;
 
-        private string log = "";
-        private readonly System.Collections.Generic.List<string> logLines = new System.Collections.Generic.List<string>();
+        /// <summary>0 = pixel perfect, 1 = nearest stretch, 2 = smooth stretch.</summary>
+        public int Stretch = 1;
+
+        public int PaletteLevel;
+
+        private readonly List<string> logLines = new List<string>();
 
         public Overlay(Win32Window window)
         {
@@ -53,11 +65,12 @@ namespace DPTDOOM2D.Ui
             if (!Visible) Row = 0;
         }
 
-        public void Log(string line)
+        public void AddLog(string line)
         {
+            if (line == null) return;
+
             logLines.Add(DateTime.Now.ToString("HH:mm:ss") + "  " + line);
-            if (logLines.Count > 12) logLines.RemoveAt(0);
-            log = string.Join("\n", logLines.ToArray());
+            if (logLines.Count > 40) logLines.RemoveAt(0);
         }
 
         public void NextTab(int delta)
@@ -122,6 +135,21 @@ namespace DPTDOOM2D.Ui
 
         private void Change(int direction)
         {
+            try
+            {
+                ChangeSetting(direction);
+            }
+            catch (Exception e)
+            {
+                // A setting must never take the game down with it: the most
+                // likely failure here is a music track that does not exist.
+                AddLog("error: " + Log.Describe(e));
+                Log.Error("overlay: changing a setting failed", e);
+            }
+        }
+
+        private void ChangeSetting(int direction)
+        {
             switch (Tab)
             {
                 case 1:
@@ -135,27 +163,37 @@ namespace DPTDOOM2D.Ui
                     }
                     else if (Row == 1)
                     {
-                        Palette.SetGamma(PaletteLevel + direction);
-                        PaletteLevel = Math.Max(0, Math.Min(4, PaletteLevel + direction));
+                        Stretch = (Stretch + direction + 3) % 3;
+                        window.Stretch = (Win32Window.StretchMode)Stretch;
                     }
-                    else if (Row == 2) ShowFps = !ShowFps;
-                    else if (Row == 3)
+                    else if (Row == 2)
+                    {
+                        PaletteLevel = Math.Max(0, Math.Min(4, PaletteLevel + direction));
+                        Palette.SetGamma(PaletteLevel);
+                        Config.Gamma = PaletteLevel;
+                    }
+                    else if (Row == 3) ShowFps = !ShowFps;
+                    else if (Row == 4)
                     {
                         Fullscreen = !Fullscreen;
                         window.SetFullscreen(Fullscreen);
                     }
-                    else if (Row == 4)
-                    {
-                        // Nearest-neighbour is the only sensible mode for pixel art;
-                        // the row exists so the choice is visible, not adjustable.
-                        
-                    }
                     break;
 
                 case 2:
-                    if (Row == 0) Sound.Volume(Math.Max(0, Math.Min(128, Sound.SndVol + direction * 8)));
-                    else if (Row == 1) Music.Volume(Math.Max(0, Math.Min(128, Music.MusVol + direction * 8)));
-                    else if (Row == 2) SkipTrack(direction);
+                    if (Row == 0)
+                    {
+                        Sound.Volume(Math.Max(0, Math.Min(128, Sound.SndVol + direction * 8)));
+                    }
+                    else if (Row == 1)
+                    {
+                        Music.Volume(Math.Max(0, Math.Min(128, Music.MusVol + direction * 8)));
+                    }
+                    else if (Row == 2)
+                    {
+                        string next = Music.Skip(direction);
+                        AddLog("music: " + Music.Describe(next) + " (" + Music.Source + ")");
+                    }
                     else if (Row == 3)
                     {
                         AudioSystem.Mixer.Muted = !AudioSystem.Mixer.Muted;
@@ -170,124 +208,207 @@ namespace DPTDOOM2D.Ui
             }
         }
 
-        public int PaletteLevel;
+        // ------------------------------------------------------------------ draw
 
-        private void SkipTrack(int direction)
+        /// <summary>Metrics for one frame: everything the drawing code needs.</summary>
+        private struct Layout
         {
-            string name = Music.Current;
-            string next = direction > 0 ? Wad.NextMus(name) : name;
-
-            if (direction > 0)
-            {
-                Music.Load(next);
-            }
-
-            Music.Start(DGame.MusicTime);
-            Log("music: " + (next ?? "?"));
+            public int X, Y, Width, Height;      // panel
+            public int Pad;
+            public int Font, SmallFont, LineHeight;
+            public int TabFont, TabHeight;
+            public bool Compact;
         }
 
-        // ------------------------------------------------------------------ draw
+        private Layout Measure(IntPtr dc, int width, int height)
+        {
+            var l = new Layout();
+
+            // "Compact" is the 1x window: 320x200 leaves no room for margins, so
+            // the panel goes full bleed and the text drops a couple of points.
+            l.Compact = width < 520 || height < 380;
+
+            l.Font = l.Compact ? 11 : 14;
+            l.SmallFont = l.Compact ? 10 : 13;
+            l.LineHeight = l.Compact ? 13 : 19;
+            l.Pad = l.Compact ? 5 : 12;
+
+            int margin = l.Compact ? 0 : 10;
+            l.Width = width - margin * 2;
+            l.Height = height - margin * 2;
+
+            if (!l.Compact)
+            {
+                if (l.Width > 580) l.Width = 580;
+                if (l.Height > 400) l.Height = 400;
+            }
+
+            l.X = (width - l.Width) / 2;
+            l.Y = (height - l.Height) / 2;
+
+            // Tabs: pick the largest font whose strip still fits the panel.
+            l.TabFont = l.Compact ? 11 : 14;
+            for (int attempt = 0; attempt < 4; ++attempt)
+            {
+                if (TabStripWidth(dc, l.TabFont) <= l.Width - l.Pad * 2) break;
+                l.TabFont -= 1;
+                if (l.TabFont < 9) break;
+            }
+
+            int textW, textH;
+            window.MeasureText(dc, "Ag", true, l.TabFont, out textW, out textH);
+            l.TabHeight = textH + (l.Compact ? 5 : 8);
+
+            return l;
+        }
+
+        private int TabStripWidth(IntPtr dc, int font)
+        {
+            int total = 0;
+            for (int i = 0; i < TabNames.Length; ++i)
+            {
+                int w, h;
+                window.MeasureText(dc, TabNames[i], true, font, out w, out h);
+                total += w + 14 + 4;      // box padding + gap
+            }
+            return total;
+        }
 
         public void Draw(IntPtr dc, int width, int height, int fps)
         {
             if (!Visible) return;
 
-            const int Pad = 10;
-            const int LineHeight = 18;
+            Layout l = Measure(dc, width, height);
 
-            int panelW = Math.Min(width - Pad * 2, 470);
-            int panelH = Math.Min(height - Pad * 2, 330);
-            int x = (width - panelW) / 2;
-            int y = (height - panelH) / 2;
-
-            window.FillRect(dc, x, y, panelW, panelH, 240, 12, 16, 26);
-            window.FillRect(dc, x, y, panelW, 2, 255, 255, 77, 90);
-            window.FillRect(dc, x, y + panelH - 2, panelW, 2, 255, 255, 77, 90);
+            window.FillRect(dc, l.X, l.Y, l.Width, l.Height, 240, 12, 16, 26);
+            window.FillRect(dc, l.X, l.Y, l.Width, 2, 255, 255, 77, 90);
+            window.FillRect(dc, l.X, l.Y + l.Height - 2, l.Width, 2, 255, 255, 77, 90);
 
             uint accent = NativeMethods.Rgb(255, 77, 90);
             uint text = NativeMethods.Rgb(230, 230, 230);
             uint muted = NativeMethods.Rgb(150, 150, 160);
 
-            // tab strip
-            int tx = x + Pad;
-            for (int i = 0; i < TabNames.Length; ++i)
-            {
-                bool active = i == Tab;
-                if (active) window.FillRect(dc, tx - 4, y + 8, TabNames[i].Length * 9 + 10, LineHeight + 2, 255, 40, 46, 70);
-                window.DrawText(dc, TabNames[i], tx, y + 8, active ? accent : muted, active, 14);
-                tx += TabNames[i].Length * 9 + 18;
-            }
+            DrawTabs(dc, l, accent, muted);
 
-            int line = y + 40;
+            int contentX = l.X + l.Pad;
+            int contentY = l.Y + l.TabHeight + (l.Compact ? 5 : 10);
+            int contentW = l.Width - l.Pad * 2;
+            int hintHeight = l.Compact ? 0 : l.LineHeight + 6;
+            int contentH = l.Height - (contentY - l.Y) - hintHeight;
 
             switch (Tab)
             {
-                case 0: DrawMonitor(dc, x + Pad, line, panelW - Pad * 2, fps); break;
-                case 1: DrawVideo(dc, x + Pad, line, accent, text); break;
-                case 2: DrawAudio(dc, x + Pad, line, accent, text); break;
-                case 3: DrawGame(dc, x + Pad, line, accent, text); break;
-                case 4: DrawLog(dc, x + Pad, line, text); break;
+                case 0: DrawMonitor(dc, l, contentX, contentY, contentW, contentH, fps); break;
+                case 1: DrawVideo(dc, l, contentX, contentY, contentW, accent, text); break;
+                case 2: DrawAudio(dc, l, contentX, contentY, contentW, accent, text); break;
+                case 3: DrawGame(dc, l, contentX, contentY, contentW, accent, text); break;
+                case 4: DrawLog(dc, l, contentX, contentY, contentW, contentH, text); break;
             }
 
-            string hint = LocksInput ? "TAB switch   arrows change   F2 close" : "TAB switch   F2 close   (game input active)";
-            window.DrawText(dc, hint, x + Pad, y + panelH - 26, muted, false, 13);
+            // At 1x there is no room for the hint row; the tab strip and F2 are
+            // the whole story anyway.
+            if (l.Compact) return;
+
+            string hint = LocksInput
+                ? "TAB switch   arrows change   F2 close"
+                : "TAB switch   F2 close   (game input active)";
+
+            window.DrawText(dc, hint, l.X + l.Pad, l.Y + l.Height - l.LineHeight - 6,
+                muted, false, l.SmallFont);
         }
 
-        private void DrawMonitor(IntPtr dc, int x, int y, int width, int fps)
+        /// <summary>
+        /// Tab strip: each label is measured and centred inside its own box, and
+        /// the box grows with the text instead of assuming 9 pixels per character.
+        /// </summary>
+        private void DrawTabs(IntPtr dc, Layout l, uint accent, uint muted)
+        {
+            int x = l.X + l.Pad;
+            int y = l.Y + (l.Compact ? 4 : 8);
+
+            for (int i = 0; i < TabNames.Length; ++i)
+            {
+                int textW, textH;
+                window.MeasureText(dc, TabNames[i], true, l.TabFont, out textW, out textH);
+
+                int boxW = textW + 14;
+                int boxH = textH + (l.Compact ? 3 : 6);
+                bool active = i == Tab;
+
+                if (active)
+                {
+                    window.FillRect(dc, x, y, boxW, boxH, 255, 40, 46, 70);
+                    window.FillRect(dc, x, y + boxH - 1, boxW, 1, 255, 255, 77, 90);
+                }
+
+                // Centre horizontally and vertically: (box - text) / 2 on both axes.
+                int tx = x + (boxW - textW) / 2;
+                int ty = y + (boxH - textH) / 2;
+
+                window.DrawText(dc, TabNames[i], tx, ty, active ? accent : muted, active, l.TabFont);
+
+                x += boxW + 4;
+            }
+        }
+
+        private void DrawMonitor(IntPtr dc, Layout l, int x, int y, int width, int height, int fps)
         {
             uint text = NativeMethods.Rgb(230, 230, 230);
             uint muted = NativeMethods.Rgb(150, 150, 160);
 
-            string[] lines = {
-                "fps            " + fps,
-                "map            " + DGame.Map,
-                "state          " + StateName(DGame.State),
-                "players        " + (DGame.TwoPl ? "2" : "1"),
-                "player x,y     " + DGame.Pl1.O.X + ", " + DGame.Pl1.O.Y,
-                "life / armor   " + DGame.Pl1.Life + " / " + DGame.Pl1.Armor,
-                "weapon         " + DGame.Pl1.Wpn + "  ammo " + DGame.Pl1.Ammo,
-                "monsters       " + Monsters.Count,
-                "items          " + Items.Count,
-                "music          " + (Music.IsPlaying ? Music.TrackName : "off"),
-                "scale          " + (Scale == 0 ? "fit" : Scale + "x"),
-            };
+            var lines = new List<string>();
 
-            for (int i = 0; i < lines.Length; ++i)
-            {
-                window.DrawText(dc, lines[i], x, y + i * 18, i < 2 ? text : muted, false, 14);
-            }
+            lines.Add("fps            " + fps);
+            lines.Add("map            " + DGame.Map);
+            lines.Add("state          " + StateName(DGame.State));
+            lines.Add("players        " + (DGame.TwoPl ? "2" : "1"));
+            lines.Add("player x,y     " + DGame.Pl1.O.X + ", " + DGame.Pl1.O.Y);
+            lines.Add("life / armor   " + DGame.Pl1.Life + " / " + DGame.Pl1.Armor);
+            lines.Add("weapon         " + DGame.Pl1.Wpn + "  ammo " + DGame.Pl1.Ammo);
+            lines.Add("monsters       " + Monsters.Count);
+            lines.Add("items          " + Items.Count);
+            lines.Add("music          " + (Music.IsPlaying ? Music.Describe(Music.Current) : "off"));
+            lines.Add("track          " + (Music.TrackName.Length > 0 ? Music.TrackName : "-")
+                + " (" + Music.Source + ")");
+            lines.Add("scale          " + (Scale == 0 ? "fit" : Scale + "x")
+                + "  " + Config.StretchName(Stretch));
+            if (Net.NetInput.Active) lines.Add("net            " + Net.NetInput.Status());
+
+            int maxLines = Math.Max(1, height / l.LineHeight);
+            int count = Math.Min(lines.Count, maxLines);
+
+            for (int i = 0; i < count; ++i)
+                window.DrawText(dc, lines[i], x, y + i * l.LineHeight, i < 2 ? text : muted, false, l.Font);
         }
 
-        private void DrawVideo(IntPtr dc, int x, int y, uint accent, uint text)
+        private void DrawVideo(IntPtr dc, Layout l, int x, int y, int width, uint accent, uint text)
         {
-            string[] labels = {
-                "Scale", "Brightness", "Show FPS", "Fullscreen", "Filtering"
-            };
+            string[] labels = { "Scale", "Stretch", "Brightness", "Show FPS", "Fullscreen" };
             string[] values = {
                 Scale == 0 ? "fit to window" : Scale + "x",
-                PaletteLevel.ToString(),
+                Config.StretchName(Stretch),
+                PaletteLevel + " / 4",
                 ShowFps ? "on" : "off",
-                Fullscreen ? "on" : "off",
-                "nearest"
+                Fullscreen ? "on" : "off"
             };
 
-            DrawRows(dc, x, y, labels, values, accent, text);
+            DrawRows(dc, l, x, y, width, labels, values, accent, text);
         }
 
-        private void DrawAudio(IntPtr dc, int x, int y, uint accent, uint text)
+        private void DrawAudio(IntPtr dc, Layout l, int x, int y, int width, uint accent, uint text)
         {
-            string[] labels = { "Sound volume", "Music volume", "Next track", "Mute" };
+            string[] labels = { "Sound volume", "Music volume", "Change track", "Mute" };
             string[] values = {
                 Sound.SndVol.ToString(),
                 Music.MusVol.ToString(),
-                Music.Current ?? "-",
+                Music.Describe(Music.Current),
                 AudioSystem.Mixer.Muted ? "on" : "off"
             };
 
-            DrawRows(dc, x, y, labels, values, accent, text);
+            DrawRows(dc, l, x, y, width, labels, values, accent, text);
         }
 
-        private void DrawGame(IntPtr dc, int x, int y, uint accent, uint text)
+        private void DrawGame(IntPtr dc, Layout l, int x, int y, int width, uint accent, uint text)
         {
             string[] labels = { "Cheats in deathmatch", "Fly", "Immortal" };
             string[] values = {
@@ -296,32 +417,65 @@ namespace DPTDOOM2D.Ui
                 Player.Immortal ? "on" : "off"
             };
 
-            DrawRows(dc, x, y, labels, values, accent, text);
+            DrawRows(dc, l, x, y, width, labels, values, accent, text);
         }
 
-        private void DrawLog(IntPtr dc, int x, int y, uint text)
+        private void DrawLog(IntPtr dc, Layout l, int x, int y, int width, int height, uint text)
         {
             if (logLines.Count == 0)
             {
-                window.DrawText(dc, "(empty)", x, y, NativeMethods.Rgb(150, 150, 160), false, 14);
+                window.DrawText(dc, "(empty)", x, y, NativeMethods.Rgb(150, 150, 160), false, l.Font);
                 return;
             }
 
-            for (int i = 0; i < logLines.Count; ++i)
-                window.DrawText(dc, logLines[i], x, y + i * 16, text, false, 13);
+            int maxLines = Math.Max(1, height / l.LineHeight);
+            int first = Math.Max(0, logLines.Count - maxLines);
+            int shown = logLines.Count - first;
+
+            for (int i = 0; i < shown; ++i)
+            {
+                string line = Fit(dc, logLines[first + i], width, l.SmallFont);
+                window.DrawText(dc, line, x, y + i * l.LineHeight, text, false, l.SmallFont);
+            }
         }
 
-        private void DrawRows(IntPtr dc, int x, int y, string[] labels, string[] values, uint accent, uint text)
+        /// <summary>Trims a line with an ellipsis until it fits the given width.</summary>
+        private string Fit(IntPtr dc, string line, int width, int font)
+        {
+            int w, h;
+            window.MeasureText(dc, line, false, font, out w, out h);
+            if (w <= width) return line;
+
+            string trimmed = line;
+            while (trimmed.Length > 1)
+            {
+                trimmed = trimmed.Substring(0, trimmed.Length - 1);
+                window.MeasureText(dc, trimmed + "...", false, font, out w, out h);
+                if (w <= width) return trimmed + "...";
+            }
+
+            return "";
+        }
+
+        /// <summary>Label on the left, value right-aligned in the panel.</summary>
+        private void DrawRows(IntPtr dc, Layout l, int x, int y, int width,
+            string[] labels, string[] values, uint accent, uint text)
         {
             for (int i = 0; i < labels.Length; ++i)
             {
                 bool selected = i == Row;
-                int lineY = y + i * 20;
+                int lineY = y + i * (l.LineHeight + 4);
 
-                if (selected) window.FillRect(dc, x - 4, lineY - 2, 440, 19, 255, 34, 40, 62);
+                if (selected)
+                    window.FillRect(dc, x - (l.Compact ? 2 : 4), lineY - 2, width + (l.Compact ? 4 : 8),
+                        l.LineHeight + 3, 255, 34, 40, 62);
 
-                window.DrawText(dc, (selected ? "> " : "  ") + labels[i], x, lineY, selected ? accent : text, selected, 14);
-                window.DrawText(dc, values[i], x + 260, lineY, text, false, 14);
+                window.DrawText(dc, (selected ? "> " : "  ") + labels[i], x, lineY,
+                    selected ? accent : text, selected, l.Font);
+
+                int valueW, valueH;
+                window.MeasureText(dc, values[i], false, l.Font, out valueW, out valueH);
+                window.DrawText(dc, values[i], x + width - valueW, lineY, text, false, l.Font);
             }
         }
 

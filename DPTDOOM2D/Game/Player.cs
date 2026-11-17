@@ -190,7 +190,7 @@ namespace DPTDOOM2D.Game
             {
                 if (p.Fire == 0)
                 {
-                    if (Kbd.Keys[p.Kf] && p.Cell >= 40)
+                    if (Kbd.Down(p.Kf) && p.Cell >= 40)
                     {
                         Misc.Sound(snd[5], 128);
                         p.Fire = 21; p.Cell -= 40; p.DrawSt |= PL_DRAWWPN;
@@ -204,9 +204,9 @@ namespace DPTDOOM2D.Game
             {
                 if (p.CSnd == 0)
                 {
-                    if (!Kbd.Keys[p.Kf]) { Misc.Sound(snd[7], 128); p.CSnd = 13; return; }
+                    if (!Kbd.Down(p.Kf)) { Misc.Sound(snd[7], 128); p.CSnd = 13; return; }
                 }
-                if (Kbd.Keys[p.Kf] && p.Fire == 0)
+                if (Kbd.Down(p.Kf) && p.Fire == 0)
                 {
                     p.Fire = 2;
                     Weapons.Chainsaw(p.O.X + (p.D != 0 ? 4 : -4), p.O.Y, Game.Dm ? 9 : 3, p.Id);
@@ -216,7 +216,7 @@ namespace DPTDOOM2D.Game
             }
             else if (p.Fire != 0) return;
 
-            if (Kbd.Keys[p.Kf] || p.Wpn == 8)
+            if (Kbd.Down(p.Kf) || p.Wpn == 8)
             {
                 switch (p.Wpn)
                 {
@@ -275,12 +275,12 @@ namespace DPTDOOM2D.Game
             if (p.CWpn != 0) return;
             if (p.Fire != 0 && p.Wpn != 1) return;
 
-            if (Kbd.Keys[p.Kwl])
+            if (Kbd.Down(p.Kwl))
             {
                 do { if (--p.Wpn < 0) p.Wpn = 10; } while ((p.Wpns & (1 << p.Wpn)) == 0);
                 p.CWpn = 3;
             }
-            else if (Kbd.Keys[p.Kwr])
+            else if (Kbd.Down(p.Kwr))
             {
                 do { if (++p.Wpn > 10) p.Wpn = 0; } while ((p.Wpns & (1 << p.Wpn)) == 0);
                 p.CWpn = 3;
@@ -311,7 +311,7 @@ namespace DPTDOOM2D.Game
                 p.DrawSt |= PL_DRAWAIR;
             }
 
-            if (Kbd.Keys[p.Kj])
+            if (Kbd.Down(p.Kj))
             {
                 if (Fly) p.O.YV = -PlFlyUp;
                 else
@@ -656,15 +656,15 @@ namespace DPTDOOM2D.Game
             if ((st & Z.HitWater) != 0) Misc.Splash(p.O, PlRad + PlHt);
             if ((p.F & PLF_FIRE) != 0 && p.Fire != 2) p.F -= PLF_FIRE;
 
-            if (Kbd.Keys[p.Ku]) { p.F |= PLF_UP; p.LookY -= 5; }
+            if (Kbd.Down(p.Ku)) { p.F |= PLF_UP; p.LookY -= 5; }
             else
             {
                 p.F &= unchecked((byte)~PLF_UP);
-                if (Kbd.Keys[p.Kd]) { p.F |= PLF_DOWN; p.LookY += 5; }
+                if (Kbd.Down(p.Kd)) { p.F |= PLF_DOWN; p.LookY += 5; }
                 else { p.F &= unchecked((byte)~PLF_DOWN); p.LookY = Misc.Dec(p.LookY, 5); }
             }
 
-            if (Kbd.Keys[p.Kp]) Switches.Press(p.O.X, p.O.Y, p.O.R, p.O.H, (byte)(1 | p.Keys), p.Id);
+            if (Kbd.Down(p.Kp)) Switches.Press(p.O.X, p.O.Y, p.O.R, p.O.H, (byte)(1 | p.Keys), p.Id);
 
             if (p.Fire != 0) --p.Fire;
             if (p.CWpn != 0) --p.CWpn;
@@ -692,32 +692,32 @@ namespace DPTDOOM2D.Game
                     p.S += Math.Abs(p.O.XV) / 2;
                     if (p.S >= 24) p.S %= 24;
 
-                    if (!Kbd.Keys[p.Kl] && !Kbd.Keys[p.Kr])
+                    if (!Kbd.Down(p.Kl) && !Kbd.Down(p.Kr))
                     {
                         if (p.O.XV != 0) p.O.XV = Misc.Dec(p.O.XV, 1);
                         else p.St = Stand;
                         break;
                     }
-                    if (p.O.XV < Run && Kbd.Keys[p.Kr]) { p.O.XV += Run >> 3; p.D = 1; }
+                    if (p.O.XV < Run && Kbd.Down(p.Kr)) { p.O.XV += Run >> 3; p.D = 1; }
                     else if (Run > 8) Smoke.Gas(p.O.X, p.O.Y - 2, 2, 3, p.O.XV + p.O.VX, p.O.YV + p.O.VY, 32);
 
-                    if (p.O.XV > -Run && Kbd.Keys[p.Kl]) { p.O.XV -= Run >> 3; p.D = 0; }
+                    if (p.O.XV > -Run && Kbd.Down(p.Kl)) { p.O.XV -= Run >> 3; p.D = 0; }
                     else if (Run > 8) Smoke.Gas(p.O.X, p.O.Y - 2, 2, 3, p.O.XV + p.O.VX, p.O.YV + p.O.VY, 32);
                     break;
 
                 case Stand:
                     ChgWpn(p); Fire(p); JumpAndBreathe(p, st);
                     if (Fly) Smoke.Gas(p.O.X, p.O.Y - 2, 2, 3, p.O.XV + p.O.VX, p.O.YV + p.O.VY, 128);
-                    if (Kbd.Keys[p.Kl]) { p.St = Go; p.S = 0; p.D = 0; }
-                    else if (Kbd.Keys[p.Kr]) { p.St = Go; p.S = 0; p.D = 1; }
+                    if (Kbd.Down(p.Kl)) { p.St = Go; p.S = 0; p.D = 0; }
+                    else if (Kbd.Down(p.Kr)) { p.St = Go; p.S = 0; p.D = 1; }
                     break;
 
                 case Dead:
                 case Mess:
                 case Out:
                     p.O.XV = Misc.Dec(p.O.XV, 1);
-                    if (Kbd.Keys[p.Ku] || Kbd.Keys[p.Kd] || Kbd.Keys[p.Kl] || Kbd.Keys[p.Kr] ||
-                        Kbd.Keys[p.Kf] || Kbd.Keys[p.Kj] || Kbd.Keys[p.Kp] || Kbd.Keys[p.Kwl] || Kbd.Keys[p.Kwr])
+                    if (Kbd.Down(p.Ku) || Kbd.Down(p.Kd) || Kbd.Down(p.Kl) || Kbd.Down(p.Kr) ||
+                        Kbd.Down(p.Kf) || Kbd.Down(p.Kj) || Kbd.Down(p.Kp) || Kbd.Down(p.Kwl) || Kbd.Down(p.Kwr))
                     {
                         if (p.St != Out) Monsters.SpawnDeadPl(p.O, p.Color, p.St == Mess ? 1 : 0);
                         Restore(p);

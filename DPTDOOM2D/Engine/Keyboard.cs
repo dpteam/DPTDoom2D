@@ -190,9 +190,48 @@ namespace DPTDOOM2D.Engine
             return bits;
         }
 
+        /// <summary>
+        /// True while the key is held, with the arrows standing in for the numpad.
+        ///
+        /// Doom2D was designed around the numeric keypad, but a laptop has no
+        /// keypad and NumLock off turns one into arrows. Without this, the menu
+        /// (which reads the arrows directly) works while the player cannot move at
+        /// all — which reads as "controls are broken", not as "wrong key".
+        /// </summary>
         public static bool Down(int sym)
         {
-            return sym >= 0 && sym < KeyCount && Keys[sym];
+            if (sym >= 0 && sym < KeyCount && Keys[sym]) return true;
+
+            int alias = Alias(sym);
+            return alias >= 0 && alias < KeyCount && Keys[alias];
+        }
+
+        /// <summary>The key that may be pressed instead of <paramref name="sym"/>.</summary>
+        static int Alias(int sym)
+        {
+            switch (sym)
+            {
+                case SDLK_KP4: return SDLK_LEFT;
+                case SDLK_LEFT: return SDLK_KP4;
+
+                case SDLK_KP6: return SDLK_RIGHT;
+                case SDLK_RIGHT: return SDLK_KP6;
+
+                case SDLK_KP8: return SDLK_UP;
+                case SDLK_UP: return SDLK_KP8;
+
+                case SDLK_KP5: return SDLK_DOWN;
+                case SDLK_KP2: return SDLK_DOWN;
+                case SDLK_DOWN: return SDLK_KP5;
+
+                case SDLK_HOME: return SDLK_KP7;
+                case SDLK_KP7: return SDLK_HOME;
+
+                case SDLK_END: return SDLK_KP1;
+                case SDLK_KP1: return SDLK_END;
+
+                default: return -1;
+            }
         }
 
         /// <summary>True if any of the given keysym was pressed this tick.</summary>

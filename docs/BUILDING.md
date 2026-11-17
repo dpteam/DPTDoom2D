@@ -60,14 +60,18 @@ dist/DPTDOOM2D/
 ├─ dptdoom2d-launcher.exe    лаунчер
 ├─ dptdoom2d-master.exe      мастер + релей
 ├─ DPTDOOM2D.Shared.dll
-├─ Data/                     wad, музыка, default.cfg
+├─ Data/
+│  ├─ doom2d.wad             базовые данные
+│  ├─ default.cfg            привязки и настройки
+│  ├─ Music/                 30 XM-треков
+│  └─ Maps/                  166 паков кастомных карт
 ├─ README.md
 ├─ LICENSE
 └─ CHANGELOG.md
 ```
 
 Папку можно копировать на любую Windows-машину с .NET Framework 4.0 — установка
-не нужна.
+не нужна. Логи пишутся в `Logs/` рядом с exe.
 
 ## Проверки без окна
 
@@ -81,6 +85,8 @@ dptdoom2d.exe --levelend <карта>
 dptdoom2d.exe --switches <карта>
 dptdoom2d.exe --walls <карта>
 dptdoom2d.exe --music <трек>
+dptdoom2d.exe --sounds
+dptdoom2d.exe --maps
 dptdoom2d.exe --dump <ресурс> <out.bmp>
 dptdoom2d.exe --list
 ```
@@ -97,6 +103,13 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 
 `--saveload` играет, сохраняет, обнуляет мир, загружает и сверяет координаты,
 патроны, жизни и фраги. Возвращает код 1 при расхождении — годится для CI.
+
+`--sounds` разбирает все 140 лампов `DS*` и проверяет, что каждый дал данные;
+`--music` грузит трек так же, как игра (файл, потом DMM из WAD), и рендерит
+секунду — если плеер молчит, peak равен нулю и код возврата 1. Это те две
+проверки, которые ловят «звука нет» и «музыка молчит».
+
+`--maps` печатает библиотеку паков и уровни в текущем наборе WAD.
 
 Все headless-режимы пересеивают ГПСЧ фиксированным зерном (`Headless.Seed`),
 поэтому одна и та же команда всегда даёт один и тот же кадр. На этом держатся и
@@ -121,7 +134,8 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 
 1. `fetch-data.ps1` — данные из upstream
 2. `dotnet build DPTDOOM2D.slnx` — все четыре проекта
-3. `build.ps1` — 19 карт, сохранения, фронтенд, 30 треков
+3. `build.ps1` — 19 карт, сохранения, фронтенд, 140 звуков, 30 треков (из файлов
+   и из WAD), 166 паков карт
 4. `build.ps1 -Net` — сеть и релей
 5. `build.ps1 -Pack` → артефакт **DPTDOOM2D-win64**
 6. `make-docs-images.ps1` → артефакт **docs-images**
@@ -132,7 +146,7 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 |---|---|
 | `tools/build.ps1` | сборка, проверки, упаковка, запуск |
 | `tools/fetch-data.ps1` | клонировать/обновить `refs/doom2d-rembo` |
-| `tools/make-icon.ps1` | `resources/dptdoom2d.ico` из титульного экрана (16…256 px) |
+| `tools/make-icon.ps1` | `resources/dptdoom2d.ico` — квадратный кроп 1:1 из титульника (16…256 px) |
 | `tools/make-docs-images.ps1` | картинки для доков из реального фреймбуфера + оверлей и лаунчер |
 | `tools/screenshot.ps1` | снять клиентскую область окна, опционально «нажав» клавиши |
 | `tools/net-test.ps1` | проверка прямой сетевой сессии |

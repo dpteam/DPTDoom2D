@@ -26,6 +26,7 @@ namespace DPTDOOM2D.Engine
             public int Rate;
             public int LoopStart;
             public int LoopLength;
+            public string Name;
         }
 
         public static void Init()
@@ -52,26 +53,65 @@ namespace DPTDOOM2D.Engine
             if (cache.TryGetValue(id, out cached)) return cached;
 
             byte[] raw = Wad.LoadRes(id);
-            if (raw.Length < 16) { cache[id] = null; return null; }
+            CachedSound sound = Parse(id, raw);
+            cache[id] = sound;
+            return sound;
+        }
 
-            int length = BitConverter.ToInt32(raw, 0);
-            int rate = BitConverter.ToInt32(raw, 4);
-            int loopStart = BitConverter.ToInt32(raw, 8);
-            int loopLength = BitConverter.ToInt32(raw, 12);
+        /// <summary>
+        /// Reads a DMI lump.
+        ///
+        /// Two layouts exist and both are in the wild. The DOS build wrote an
+        /// 8-byte header (len u16, rate u16, loop start u16, loop length u16) and
+        /// that is what doom2d.wad actually contains; rembo's sound.h describes a
+        /// 16-byte header with 32-bit fields. Guessing wrong makes every sample
+        /// silently unplayable, which sounds exactly like "there are no sounds".
+        ///
+        /// The lump length is the tie-breaker: the 8-byte header adds up exactly.
+        /// </summary>
+        static CachedSound Parse(int id, byte[] raw)
+        {
+            if (raw == null || raw.Length < 8) return null;
 
-            if (length <= 0 || 16 + length > raw.Length) { cache[id] = null; return null; }
+            int length, rate, loopStart, loopLength, dataAt;
+
+            int len16 = BitConverter.ToUInt16(raw, 0);
+            int rate16 = BitConverter.ToUInt16(raw, 2);
+
+            bool header8 = len16 > 0 && len16 + 8 <= raw.Length
+                && rate16 >= 4000 && rate16 <= 48000;
+
+            if (header8)
+            {
+                length = len16;
+                rate = rate16;
+                loopStart = BitConverter.ToUInt16(raw, 4);
+                loopLength = BitConverter.ToUInt16(raw, 6);
+                dataAt = 8;
+            }
+            else
+            {
+                if (raw.Length < 16) return null;
+
+                length = BitConverter.ToInt32(raw, 0);
+                rate = BitConverter.ToInt32(raw, 4);
+                loopStart = BitConverter.ToInt32(raw, 8);
+                loopLength = BitConverter.ToInt32(raw, 12);
+                dataAt = 16;
+            }
+
+            if (length <= 0 || dataAt + length > raw.Length) return null;
             if (rate <= 1000 || rate > 48000) rate = 11025;
 
             var data = new sbyte[length];
-            for (int i = 0; i < length; ++i) data[i] = (sbyte)raw[16 + i];
+            for (int i = 0; i < length; ++i) data[i] = (sbyte)raw[dataAt + i];
 
             var sound = new CachedSound();
             sound.Data = data;
             sound.Rate = rate;
             sound.LoopStart = loopStart >= 0 && loopStart < length ? loopStart : 0;
             sound.LoopLength = loopLength > 0 && loopStart + loopLength <= length ? loopLength : 0;
-
-            cache[id] = sound;
+            sound.Name = Wad.GetResName(id);
             return sound;
         }
 
@@ -124,5 +164,53 @@ namespace DPTDOOM2D.Engine
 
         /// <summary>Number of sounds currently cached, for the F2 overlay.</summary>
         public static int CachedCount { get { return cache.Count; } }
+
+        /// <summary>
+        /// Walks D_START..D_END and parses every lump, for the headless
+        /// <c>--sounds</c> check. Returns the number of sounds that produced data.
+        /// </summary>
+        public static int Diagnose(out int total, out int failed, out int looped, out int peak)
+        {
+            total = 0;
+            failed = 0;
+            looped = 0;
+            peak = 0;
+
+            for (int id = Wad.DStart + 1; id < Wad.DEnd; ++id)
+            {
+                string name = Wad.GetResName(id);
+                if (!name.StartsWith("DS", StringComparison.OrdinalIgnoreCase)) continue;
+
+                ++total;
+
+                CachedSound sound;
+                try
+                {
+                    sound = Parse(id, Wad.LoadRes(id));
+                }
+                catch (Exception e)
+                {
+                    Log.Warn("sound " + name + ": " + Log.Describe(e));
+                    sound = null;
+                }
+
+                if (sound == null || sound.Data.Length == 0)
+                {
+                    ++failed;
+                    continue;
+                }
+
+                if (sound.LoopLength > 0) ++looped;
+
+                for (int i = 0; i < sound.Data.Length; ++i)
+                {
+                    int v = sound.Data[i];
+                    if (v < 0) v = -v;
+                    if (v > peak) peak = v;
+                }
+            }
+
+            return total - failed;
+        }
     }
 }

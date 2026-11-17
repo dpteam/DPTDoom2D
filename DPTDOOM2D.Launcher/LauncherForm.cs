@@ -31,6 +31,8 @@ namespace DPTDOOM2D.Launcher
         private NumericUpDown portBox;
         private TextBox passwordBox;
         private ComboBox scaleBox;
+        private ComboBox stretchBox;
+        private ComboBox mapPackBox;
         private CheckBox fullscreen;
         private TextBox masterBox;
         private CheckBox useRelay;
@@ -77,7 +79,7 @@ namespace DPTDOOM2D.Launcher
             Controls.Add(subtitle);
 
             // ---- single player ------------------------------------------------
-            var singleGroup = MakeGroup("Single player", 16, 80, 360, 92);
+            var singleGroup = MakeGroup("Single player", 16, 80, 360, 130);
             Controls.Add(singleGroup);
 
             mapBox = new ComboBox();
@@ -89,23 +91,41 @@ namespace DPTDOOM2D.Launcher
             singleGroup.Controls.Add(MakeLabel("Level", 12, 27));
             singleGroup.Controls.Add(mapBox);
 
+            // Custom map library. "-" is the built-in campaign; anything else is
+            // a WAD from Data/Maps, loaded instead of it.
+            mapPackBox = new ComboBox();
+            mapPackBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            mapPackBox.Location = new Point(90, 52);
+            mapPackBox.Width = 250;
+            singleGroup.Controls.Add(MakeLabel("Map pack", 12, 55));
+            singleGroup.Controls.Add(mapPackBox);
+
             scaleBox = new ComboBox();
             scaleBox.DropDownStyle = ComboBoxStyle.DropDownList;
             scaleBox.Items.AddRange(new object[] { "1x", "2x", "3x", "4x", "5x", "6x", "fit" });
             scaleBox.SelectedIndex = 1;
-            scaleBox.Location = new Point(90, 54);
+            scaleBox.Location = new Point(90, 80);
             scaleBox.Width = 120;
-            singleGroup.Controls.Add(MakeLabel("Window", 12, 57));
+            singleGroup.Controls.Add(MakeLabel("Window", 12, 83));
             singleGroup.Controls.Add(scaleBox);
+
+            stretchBox = new ComboBox();
+            stretchBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            stretchBox.Items.AddRange(new object[] { "pixel perfect", "nearest", "smooth" });
+            stretchBox.SelectedIndex = 1;
+            stretchBox.Location = new Point(90, 104);
+            stretchBox.Width = 120;
+            singleGroup.Controls.Add(MakeLabel("Stretch", 12, 107));
+            singleGroup.Controls.Add(stretchBox);
 
             fullscreen = new CheckBox();
             fullscreen.Text = "Fullscreen";
-            fullscreen.Location = new Point(230, 54);
+            fullscreen.Location = new Point(230, 106);
             fullscreen.AutoSize = true;
             singleGroup.Controls.Add(fullscreen);
 
             // ---- network ------------------------------------------------------
-            var netGroup = MakeGroup("Two players (lockstep over TCP)", 16, 182, 360, 190);
+            var netGroup = MakeGroup("Two players (lockstep over TCP)", 16, 218, 360, 170);
             Controls.Add(netGroup);
 
             onePlayer = new RadioButton();
@@ -150,7 +170,7 @@ namespace DPTDOOM2D.Launcher
             netGroup.Controls.Add(masterBox);
 
             // ---- sessions -----------------------------------------------------
-            var sessionGroup = MakeGroup("Public sessions", 16, 384, 360, 150);
+            var sessionGroup = MakeGroup("Public sessions", 16, 398, 360, 136);
             Controls.Add(sessionGroup);
 
             sessions = new ListView();
@@ -219,6 +239,8 @@ namespace DPTDOOM2D.Launcher
             // Keep the preview in step with the controls it describes.
             mapBox.SelectedIndexChanged += (s, e) => UpdatePreview();
             scaleBox.SelectedIndexChanged += (s, e) => UpdatePreview();
+            stretchBox.SelectedIndexChanged += (s, e) => UpdatePreview();
+            mapPackBox.SelectedIndexChanged += (s, e) => UpdatePreview();
             portBox.ValueChanged += (s, e) => UpdatePreview();
             useRelay.CheckedChanged += (s, e) => UpdatePreview();
             fullscreen.CheckedChanged += (s, e) => UpdatePreview();
@@ -255,12 +277,42 @@ namespace DPTDOOM2D.Launcher
             masterBox.Text = settings.Master;
             useRelay.Checked = settings.UseRelay;
 
+            switch (settings.Stretch)
+            {
+                case "pixel": stretchBox.SelectedIndex = 0; break;
+                case "smooth": stretchBox.SelectedIndex = 2; break;
+                default: stretchBox.SelectedIndex = 1; break;
+            }
+
             if (settings.TwoPlayers && settings.Deathmatch) twoPlayers.Checked = true;
             else onePlayer.Checked = true;
 
             if (settings.GamePath.Length == 0) settings.GamePath = LauncherSettings.FindGame() ?? "";
 
+            RefreshMapPacks();
+
             UpdatePreview();
+        }
+
+        /// <summary>Fills the map pack list from the game's Data/Maps folder.</summary>
+        private void RefreshMapPacks()
+        {
+            string current = settings.MapPack;
+
+            mapPackBox.Items.Clear();
+            mapPackBox.Items.Add("(built-in campaign)");
+
+            string[] packs = LauncherSettings.FindMapPacks(settings.GamePath);
+            for (int i = 0; i < packs.Length; ++i) mapPackBox.Items.Add(packs[i]);
+
+            int at = 0;
+            if (!string.IsNullOrEmpty(current))
+            {
+                for (int i = 1; i < mapPackBox.Items.Count; ++i)
+                    if (string.Equals((string)mapPackBox.Items[i], current, StringComparison.OrdinalIgnoreCase)) { at = i; break; }
+            }
+
+            mapPackBox.SelectedIndex = at;
         }
 
         private void Persist()
@@ -274,6 +326,16 @@ namespace DPTDOOM2D.Launcher
             settings.UseRelay = useRelay.Checked;
             settings.TwoPlayers = twoPlayers.Checked;
             settings.Deathmatch = twoPlayers.Checked;
+
+            switch (stretchBox.SelectedIndex)
+            {
+                case 0: settings.Stretch = "pixel"; break;
+                case 2: settings.Stretch = "smooth"; break;
+                default: settings.Stretch = "near"; break;
+            }
+
+            settings.MapPack = mapPackBox.SelectedIndex > 0 ? (string)mapPackBox.SelectedItem : "";
+
             settings.Save();
         }
 

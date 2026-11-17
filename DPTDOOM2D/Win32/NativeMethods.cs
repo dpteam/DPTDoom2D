@@ -315,6 +315,17 @@ namespace DPTDOOM2D.Win32
         [DllImport("gdi32.dll")] public static extern IntPtr CreateSolidBrush(uint color);
         [DllImport("user32.dll")] public static extern int FillRect(IntPtr dc, ref RECT rect, IntPtr brush);
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SIZE { public int cx, cy; }
+
+        /// <summary>
+        /// Text width in device units for the font currently selected into the DC.
+        /// The overlay needs it to centre a label inside its tab: guessing at
+        /// "characters × 9 pixels" breaks as soon as the font or the DPI changes.
+        /// </summary>
+        [DllImport("gdi32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, EntryPoint = "GetTextExtentPoint32W")]
+        public static extern bool GetTextExtentPoint32(IntPtr dc, string text, int count, out SIZE size);
+
         public static uint Rgb(int r, int g, int b) { return (uint)((r & 0xFF) | ((g & 0xFF) << 8) | ((b & 0xFF) << 16)); }
 
         // ---- kernel32 --------------------------------------------------------

@@ -6,6 +6,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using DPTDOOM2D.Engine;
 
 namespace DPTDOOM2D.Audio
 {
@@ -16,6 +17,12 @@ namespace DPTDOOM2D.Audio
     /// extra DLL, which is why the port uses it instead of XAudio2 or SDL. Four
     /// small buffers are queued and refilled from a background thread as the
     /// driver completes them, so the mixer never blocks the game loop.
+    ///
+    /// The WAVEHDR structures live in **unmanaged** memory. A managed array of
+    /// headers is a trap: the driver keeps writing into the address it was given,
+    /// and the GC is free to move that array, so completions are lost and the
+    /// stream dies after a few seconds. That bug sounds exactly like "music plays
+    /// sometimes and then stops".
     /// </summary>
     internal sealed class AudioOut : IDisposable
     {
@@ -29,13 +36,14 @@ namespace DPTDOOM2D.Audio
         private const int WHDR_DONE = 0x00000001;
         private const int WHDR_PREPARED = 0x00000002;
         private const int WHDR_INQUEUE = 0x00000010;
+        private const int WAVEHDR_SIZE = 48;
 
         private IntPtr waveOut;
         private IntPtr doneEvent;
 
         private readonly short[][] buffers = new short[BufferCount][];
         private readonly GCHandle[] pins = new GCHandle[BufferCount];
-        private readonly WAVEHDR[] headers = new WAVEHDR[BufferCount];
+        private IntPtr headers;               // BufferCount * WAVEHDR, unmanaged
 
         private Thread thread;
         private volatile bool running;
@@ -45,6 +53,9 @@ namespace DPTDOOM2D.Audio
         public Action<short[], int> Renderer;
 
         public bool IsOpen { get { return waveOut != IntPtr.Zero; } }
+
+        /// <summary>How many buffers the driver has returned since the last reset.</summary>
+        public int CompletedBuffers;
 
         public bool Open()
         {
@@ -60,11 +71,17 @@ namespace DPTDOOM2D.Audio
             format.cbSize = 0;
 
             doneEvent = CreateEvent(IntPtr.Zero, false, false, null);
-            if (doneEvent == IntPtr.Zero) return false;
+            if (doneEvent == IntPtr.Zero)
+            {
+                Log.Warn("audio: CreateEvent failed, running without sound");
+                return false;
+            }
 
             int result = waveOutOpen(out waveOut, WAVE_MAPPER, ref format, doneEvent, IntPtr.Zero, CALLBACK_EVENT);
             if (result != 0)
             {
+                // MMSYSERR_NODRIVER (6), MMSYSERR_ALLOCATED (4), ...
+                Log.Warn("audio: waveOutOpen failed with code " + result + ", running without sound");
                 waveOut = IntPtr.Zero;
                 CloseHandle(doneEvent);
                 doneEvent = IntPtr.Zero;
@@ -75,11 +92,15 @@ namespace DPTDOOM2D.Audio
             {
                 buffers[i] = new short[BufferFrames * Channels];
                 pins[i] = GCHandle.Alloc(buffers[i], GCHandleType.Pinned);
+            }
 
-                headers[i] = new WAVEHDR();
-                headers[i].lpData = pins[i].AddrOfPinnedObject();
-                headers[i].dwBufferLength = (uint)(buffers[i].Length * 2);
-                waveOutPrepareHeader(waveOut, ref headers[i], Marshal.SizeOf(typeof(WAVEHDR)));
+            headers = Marshal.AllocHGlobal(WAVEHDR_SIZE * BufferCount);
+
+            for (int i = 0; i < BufferCount; ++i)
+            {
+                WriteHeader(i, pins[i].AddrOfPinnedObject(), (uint)(buffers[i].Length * 2), 0);
+                int prepared = waveOutPrepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                if (prepared != 0) Log.Warn("audio: waveOutPrepareHeader(" + i + ") = " + prepared);
             }
 
             running = true;
@@ -89,26 +110,74 @@ namespace DPTDOOM2D.Audio
             thread.Priority = ThreadPriority.AboveNormal;
             thread.Start();
 
+            Log.Info("audio: waveOut opened at " + SampleRate + " Hz stereo, " + BufferCount + " buffers");
             return true;
+        }
+
+        // ---- unmanaged header access ----------------------------------------
+
+        private IntPtr HeaderPtr(int index)
+        {
+            return new IntPtr(headers.ToInt64() + index * WAVEHDR_SIZE);
+        }
+
+        private void WriteHeader(int index, IntPtr data, uint length, int flags)
+        {
+            IntPtr at = HeaderPtr(index);
+            Marshal.WriteIntPtr(at, 0, data);        // lpData
+            Marshal.WriteInt32(at, 8, (int)length);  // dwBufferLength
+            Marshal.WriteInt32(at, 12, 0);           // dwBytesRecorded
+            Marshal.WriteIntPtr(at, 16, IntPtr.Zero);// dwUser
+            Marshal.WriteInt32(at, 24, flags);       // dwFlags
+            Marshal.WriteInt32(at, 28, 0);           // dwLoops
+            Marshal.WriteIntPtr(at, 32, IntPtr.Zero);// lpNext
+            Marshal.WriteIntPtr(at, 40, IntPtr.Zero);// reserved
+        }
+
+        private int ReadFlags(int index)
+        {
+            return Marshal.ReadInt32(HeaderPtr(index), 24);
         }
 
         private void Loop()
         {
             while (running)
             {
+                // The event is auto-reset and signalled once per completed buffer.
                 WaitForSingleObject(doneEvent, 100);
 
                 for (int i = 0; i < BufferCount && running; ++i)
                 {
-                    if ((headers[i].dwFlags & WHDR_INQUEUE) != 0) continue;
+                    int flags = ReadFlags(i);
+
+                    if ((flags & WHDR_INQUEUE) != 0) continue;
+                    if ((flags & WHDR_PREPARED) == 0) continue;
 
                     short[] buffer = buffers[i];
-                    if (Renderer != null) Renderer(buffer, BufferFrames);
-                    else Array.Clear(buffer, 0, buffer.Length);
+                    try
+                    {
+                        if (Renderer != null) Renderer(buffer, BufferFrames);
+                        else Array.Clear(buffer, 0, buffer.Length);
+                    }
+                    catch (Exception e)
+                    {
+                        // A broken renderer must not kill the audio thread: silence
+                        // and a log line is recoverable, a dead thread is not.
+                        Array.Clear(buffer, 0, buffer.Length);
+                        Log.Error("audio: renderer failed", e);
+                    }
 
-                    headers[i].dwFlags &= ~WHDR_DONE;
-                    waveOutWrite(waveOut, ref headers[i], Marshal.SizeOf(typeof(WAVEHDR)));
+                    // Only the DONE bit is cleared. Rewriting the whole header here
+                    // wiped WHDR_PREPARED too, and waveOutWrite then failed with
+                    // WAVERR_UNPREPARED (34) on every buffer — the game had no
+                    // sound at all while looking perfectly healthy.
+                    Marshal.WriteInt32(HeaderPtr(i), 24, flags & ~WHDR_DONE);
+
+                    int written = waveOutWrite(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                    if (written != 0) Log.Warn("audio: waveOutWrite(" + i + ") = " + written);
                 }
+
+                CompletedBuffers++;
             }
         }
 
@@ -116,7 +185,24 @@ namespace DPTDOOM2D.Audio
         public void Reset()
         {
             if (waveOut == IntPtr.Zero) return;
-            waveOutReset(waveOut);
+
+            try
+            {
+                waveOutReset(waveOut);
+
+                // After a reset every header is unprepared, so they all have to be
+                // prepared again before they can be written to.
+                for (int i = 0; i < BufferCount; ++i)
+                {
+                    waveOutUnprepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                    WriteHeader(i, pins[i].AddrOfPinnedObject(), (uint)(buffers[i].Length * 2), 0);
+                    waveOutPrepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Warn("audio: reset failed: " + Log.Describe(e));
+            }
         }
 
         public void Dispose()
@@ -136,14 +222,19 @@ namespace DPTDOOM2D.Audio
                 waveOutReset(waveOut);
 
                 for (int i = 0; i < BufferCount; ++i)
-                {
-                    waveOutUnprepareHeader(waveOut, ref headers[i], Marshal.SizeOf(typeof(WAVEHDR)));
-                    if (pins[i].IsAllocated) pins[i].Free();
-                }
+                    waveOutUnprepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
 
                 waveOutClose(waveOut);
                 waveOut = IntPtr.Zero;
             }
+
+            if (headers != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(headers);
+            }
+
+            for (int i = 0; i < BufferCount; ++i)
+                if (pins[i].IsAllocated) pins[i].Free();
 
             if (doneEvent != IntPtr.Zero)
             {
@@ -166,24 +257,11 @@ namespace DPTDOOM2D.Audio
             public ushort cbSize;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WAVEHDR
-        {
-            public IntPtr lpData;
-            public uint dwBufferLength;
-            public uint dwBytesRecorded;
-            public IntPtr dwUser;
-            public int dwFlags;
-            public uint dwLoops;
-            public IntPtr lpNext;
-            public IntPtr reserved;
-        }
-
         [DllImport("winmm.dll")] private static extern int waveOutOpen(out IntPtr handle, int device, ref WAVEFORMATEX format, IntPtr callback, IntPtr instance, uint flags);
         [DllImport("winmm.dll")] private static extern int waveOutClose(IntPtr handle);
-        [DllImport("winmm.dll")] private static extern int waveOutPrepareHeader(IntPtr handle, ref WAVEHDR header, int size);
-        [DllImport("winmm.dll")] private static extern int waveOutUnprepareHeader(IntPtr handle, ref WAVEHDR header, int size);
-        [DllImport("winmm.dll")] private static extern int waveOutWrite(IntPtr handle, ref WAVEHDR header, int size);
+        [DllImport("winmm.dll")] private static extern int waveOutPrepareHeader(IntPtr handle, IntPtr header, int size);
+        [DllImport("winmm.dll")] private static extern int waveOutUnprepareHeader(IntPtr handle, IntPtr header, int size);
+        [DllImport("winmm.dll")] private static extern int waveOutWrite(IntPtr handle, IntPtr header, int size);
         [DllImport("winmm.dll")] private static extern int waveOutReset(IntPtr handle);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

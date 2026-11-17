@@ -61,6 +61,13 @@
     <None Include="..\refs\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\doom2d.wad')" />
     <None Include="..\refs\doom2d-rembo\src\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\default.cfg')" />
     <None Include="..\refs\doom2d-rembo\music\*" Link="Data\Music\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\music')" />
+
+    <!--
+      The custom map library. These are the Deluxe-era community maps that ship
+      with the distribution: one is picked per run with -map-pack, so a whole
+      folder of packs costs nothing at startup.
+    -->
+    <None Include="Maps\*.wad" Link="Data\Maps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

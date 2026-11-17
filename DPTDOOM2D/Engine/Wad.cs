@@ -172,6 +172,8 @@ namespace DPTDOOM2D.Engine
         /// <summary>strncasecmp() on a NUL-padded 8-byte name.</summary>
         public static bool NameEq(string a, string b, int max)
         {
+            if (a == null || b == null) return a == b;
+
             for (int i = 0; i < max; ++i)
             {
                 char ca = i < a.Length ? a[i] : '\0';
@@ -269,18 +271,27 @@ namespace DPTDOOM2D.Engine
         /// <summary>F_nextmus: the next music lump inside M_START..M_END.</summary>
         public static string NextMus(string current)
         {
+            if (MStart <= 0 || MEnd <= MStart || MEnd >= Entries.Count) return "MENU";
+
             int i = FindRes(current);
             if (i <= MStart || i >= MEnd) i = MStart;
-            for (++i; ; ++i)
+
+            // The loop below used to be unbounded: a music section with nothing
+            // but excluded names ("MENU", "INTERMUS", "DMI...") spun forever.
+            int limit = MEnd - MStart;
+
+            for (++i; limit > 0; ++i, --limit)
             {
                 if (i >= MEnd) i = MStart + 1;
+
                 string n = Entries[i].Name;
                 if (NameEq(n, "MENU", 8) || NameEq(n, "INTERMUS", 8) ||
                     NameEq(n, "\u008A\u008E\u008D\u0085\u0096", 8))
                     continue;
-                if (!NameEq(n, "DMI", 3)) break;
+                if (!NameEq(n, "DMI", 3)) return n;
             }
-            return Entries[i].Name;
+
+            return "MENU";
         }
 
         public static string RandMus(string current)

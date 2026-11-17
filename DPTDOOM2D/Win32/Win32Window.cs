@@ -23,6 +23,17 @@ namespace DPTDOOM2D.Win32
     /// </summary>
     public sealed class Win32Window : IDisposable
     {
+        /// <summary>How the 320x200 frame is mapped onto the window.</summary>
+        public enum StretchMode
+        {
+            /// <summary>Integer factor, letterboxed: pixels stay square.</summary>
+            PixelPerfect = 0,
+            /// <summary>Fill the window, nearest neighbour: crisp but uneven pixels.</summary>
+            Nearest = 1,
+            /// <summary>Fill the window, bilinear: soft, for high-DPI screens.</summary>
+            Smooth = 2
+        }
+
         private const string WindowClassName = "DPTDOOM2DWindow";
 
         private readonly string title;
@@ -60,7 +71,6 @@ namespace DPTDOOM2D.Win32
         private int surfaceWidth;
         private int surfaceHeight;
 
-        private IntPtr overlayFont;
 
         /// <summary>Draws on top of the presented frame, in window pixels.</summary>
         public Action<IntPtr, int, int> OverlayPainter;
@@ -90,6 +100,9 @@ namespace DPTDOOM2D.Win32
 
         /// <summary>1..6 for an integer multiple of the framebuffer, 0 to fit the window.</summary>
         public int Scale { get; set; }
+
+        /// <summary>How the frame is scaled into the client area.</summary>
+        public StretchMode Stretch = StretchMode.Nearest;
 
         public void Create(bool fullscreen)
         {
@@ -329,17 +342,35 @@ namespace DPTDOOM2D.Win32
 
             try
             {
-                int dstW = clientWidth, dstH = clientHeight;
-                int offX = 0, offY = 0;
+                int dstW, dstH, offX = 0, offY = 0;
+                int mode = NativeMethods.COLORONCOLOR;
 
-                // Integer scaling keeps pixels square; letterbox the remainder
-                // instead of stretching by a fraction.
-                if (Scale > 0)
+                if (Stretch == StretchMode.PixelPerfect)
                 {
-                    dstW = pixelWidth * Scale;
-                    dstH = pixelHeight * Scale;
+                    // Integer factor only: pixels stay square, the remainder is
+                    // letterboxed. This is the "as the original looked" mode.
+                    int factor = Scale;
+                    if (factor <= 0)
+                    {
+                        int byWidth = clientWidth / pixelWidth;
+                        int byHeight = clientHeight / pixelHeight;
+                        factor = Math.Min(byWidth, byHeight);
+                    }
+                    if (factor < 1) factor = 1;
+
+                    dstW = pixelWidth * factor;
+                    dstH = pixelHeight * factor;
                     offX = (clientWidth - dstW) / 2;
                     offY = (clientHeight - dstH) / 2;
+                }
+                else
+                {
+                    // Fill the client area. Nearest keeps the pixels crisp and
+                    // square-ish; smooth is the bilinear one for people who
+                    // prefer the softer look on a high-DPI display.
+                    dstW = clientWidth;
+                    dstH = clientHeight;
+                    if (Stretch == StretchMode.Smooth) mode = NativeMethods.HALFTONE;
                 }
 
                 if (dstW == pixelWidth && dstH == pixelHeight && offX == 0 && offY == 0)
@@ -348,9 +379,19 @@ namespace DPTDOOM2D.Win32
                 }
                 else
                 {
-                    NativeMethods.SetStretchBltMode(dc, NativeMethods.COLORONCOLOR);
+                    NativeMethods.SetStretchBltMode(dc, mode);
                     NativeMethods.StretchBlt(dc, offX, offY, dstW, dstH, memoryDc, 0, 0, pixelWidth, pixelHeight,
                         NativeMethods.SRCCOPY);
+                }
+
+                // Letterbox bars: without this the window shows whatever the
+                // desktop had there before, which looks like a rendering bug.
+                if (offX > 0 || offY > 0 || dstW < clientWidth || dstH < clientHeight)
+                {
+                    FillRect(dc, 0, 0, clientWidth, offY, 0, 0, 0, 0);
+                    FillRect(dc, 0, offY + dstH, clientWidth, clientHeight - offY - dstH, 0, 0, 0, 0);
+                    FillRect(dc, 0, offY, offX, dstH, 0, 0, 0, 0);
+                    FillRect(dc, offX + dstW, offY, clientWidth - offX - dstW, dstH, 0, 0, 0, 0);
                 }
             }
             finally
@@ -374,17 +415,53 @@ namespace DPTDOOM2D.Win32
         /// <summary>Paints text with GDI: used by the overlay, never into the framebuffer.</summary>
         public void DrawText(IntPtr dc, string text, int x, int y, uint color, bool bold, int size)
         {
-            if (overlayFont == IntPtr.Zero)
-            {
-                overlayFont = NativeMethods.CreateFont(size, 0, 0, 0, bold ? 700 : 400,
-                    0, 0, 0, 0, 0, 0, 0, 0, "Consolas");
-            }
-
-            IntPtr previous = NativeMethods.SelectObject(dc, overlayFont);
+            IntPtr font = GetFont(bold, size);
+            IntPtr previous = NativeMethods.SelectObject(dc, font);
             NativeMethods.SetBkMode(dc, 1); // TRANSPARENT
             NativeMethods.SetTextColor(dc, color);
             NativeMethods.TextOut(dc, x, y, text, text.Length);
             NativeMethods.SelectObject(dc, previous);
+        }
+
+        /// <summary>
+        /// Measures text in the same font <see cref="DrawText"/> uses, so the
+        /// overlay can centre a label inside its tab instead of guessing a width.
+        /// </summary>
+        public void MeasureText(IntPtr dc, string text, bool bold, int size, out int width, out int height)
+        {
+            width = 0;
+            height = size;
+
+            if (string.IsNullOrEmpty(text)) return;
+
+            IntPtr font = GetFont(bold, size);
+            IntPtr previous = NativeMethods.SelectObject(dc, font);
+
+            var extent = new NativeMethods.SIZE();
+            if (NativeMethods.GetTextExtentPoint32(dc, text, text.Length, out extent))
+            {
+                width = extent.cx;
+                height = extent.cy;
+            }
+
+            NativeMethods.SelectObject(dc, previous);
+        }
+
+        private readonly System.Collections.Generic.Dictionary<int, IntPtr> fonts =
+            new System.Collections.Generic.Dictionary<int, IntPtr>();
+
+        private IntPtr GetFont(bool bold, int size)
+        {
+            int key = (size << 1) | (bold ? 1 : 0);
+
+            IntPtr font;
+            if (fonts.TryGetValue(key, out font)) return font;
+
+            font = NativeMethods.CreateFont(size, 0, 0, 0, bold ? 700 : 400,
+                0, 0, 0, 0, 0, 0, 0, 0, "Consolas");
+
+            fonts[key] = font;
+            return font;
         }
 
         public void FillRect(IntPtr dc, int x, int y, int w, int h, int alpha, int r, int g, int b)
@@ -526,11 +603,8 @@ namespace DPTDOOM2D.Win32
 
             ReleaseSurface();
 
-            if (overlayFont != IntPtr.Zero)
-            {
-                NativeMethods.DeleteObject(overlayFont);
-                overlayFont = IntPtr.Zero;
-            }
+            foreach (IntPtr font in fonts.Values) NativeMethods.DeleteObject(font);
+            fonts.Clear();
 
             if (hWnd != IntPtr.Zero)
             {

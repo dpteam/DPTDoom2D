@@ -95,6 +95,12 @@ try
 		& $exe --shell 140 (Join-Path $tmp 'menu.bmp') '5:space,8:-space,20:enter,23:-enter,40:space,43:-space' | Out-Null
 		if ($LASTEXITCODE -ne 0) { Write-Host '  front end FAILED' -ForegroundColor Red; $failed++ }
 
+		# Every sound lump has to parse into playable data. This is the check that
+		# catches a wrong DMI header - the bug that made the game silent.
+		& $exe --sounds 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  sounds FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  sounds ok' -ForegroundColor DarkGray }
+
 		# Every music track has to parse and produce sound.
 		$music = Get-ChildItem (Join-Path $root '..\refs\doom2d-rembo\music') -File -ErrorAction SilentlyContinue |
 			Where-Object { $_.Name -ne 'README_INSTALL' }
@@ -104,6 +110,41 @@ try
 			if ($LASTEXITCODE -ne 0) { Write-Host "  music $($track.Name) FAILED" -ForegroundColor Red; $failed++ }
 		}
 		if ($music) { Write-Host "  music: $($music.Count) tracks ok" -ForegroundColor DarkGray }
+
+		# The same tracks have to play from the DMM songs inside the WAD, which is
+		# the fallback when Data/Music is missing.
+		$musicDir = Join-Path (Split-Path -Parent $exe) 'Data\Music'
+		$hidden = $false
+		if (Test-Path $musicDir)
+		{
+			Rename-Item $musicDir "$musicDir.hidden" -Force
+			$hidden = $true
+		}
+		try
+		{
+			foreach ($track in $music)
+			{
+				& $exe --music $track.Name 2>&1 | Out-Null
+				if ($LASTEXITCODE -ne 0) { Write-Host "  wad music $($track.Name) FAILED" -ForegroundColor Red; $failed++ }
+			}
+			if ($music) { Write-Host "  music from WAD: $($music.Count) tracks ok" -ForegroundColor DarkGray }
+		}
+		finally
+		{
+			if ($hidden) { Rename-Item "$musicDir.hidden" $musicDir -Force }
+		}
+
+		# Custom map packs: each one has to load and simulate a tick. This is what
+		# keeps the Deluxe map library in the distribution honest.
+		$mapPacks = Get-ChildItem (Join-Path $root 'Maps') -Filter *.wad -ErrorAction SilentlyContinue
+		$packFailures = 0
+		foreach ($wadFile in $mapPacks)
+		{
+			& $exe -map-pack $wadFile.Name --simulate 40 (Join-Path $tmp 'pack.bmp') 1 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host "  map pack $($wadFile.Name) FAILED" -ForegroundColor Red; $packFailures++ }
+		}
+		if ($mapPacks) { Write-Host "  map packs: $($mapPacks.Count - $packFailures)/$($mapPacks.Count) ok" -ForegroundColor DarkGray }
+		$failed += $packFailures
 
 		if ($failed -gt 0) { Fail "$failed check(s) failed" }
 		Write-Host '  all checks passed' -ForegroundColor Green

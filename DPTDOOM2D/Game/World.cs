@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DPTDOOM2D.Engine;
 
 namespace DPTDOOM2D.Game
@@ -74,8 +75,52 @@ namespace DPTDOOM2D.Game
             w.Bytes(FldF);
         }
 
+        /// <summary>Texture names a map asked for that the WAD set does not have.</summary>
+        public static readonly List<string> MissingTextures = new List<string>();
+
+        /// <summary>Texture used in place of a missing one, so a map still loads.</summary>
+        static int fallbackWall = -1;
+
+        /// <summary>
+        /// Resolves a wall texture by name.
+        ///
+        /// Custom maps — and the Deluxe packs especially — were built against
+        /// other texture sets, so they ask for names this WAD has never had
+        /// ("WALL63_1", "WS19_1", CP1251 names, ...). The original engine died on
+        /// the first one; here the map still loads with a stand-in texture and the
+        /// name is recorded, because a map that loads and looks partly wrong is
+        /// far more useful than a fatal error that says only "not found".
+        /// </summary>
+        static int ResolveWall(string name)
+        {
+            int id = Wad.FindRes(name);
+            if (id >= 0) return id;
+
+            if (!MissingTextures.Contains(name))
+            {
+                MissingTextures.Add(name);
+                Log.Warn("map texture not found: '" + name + "' (using a stand-in)");
+            }
+
+            return FallbackWall();
+        }
+
+        static int FallbackWall()
+        {
+            if (fallbackWall >= 0) return fallbackWall;
+
+            // WALL22_1 is part of the built-in animation set, so it is always
+            // present; any real wall beats a hole in the level.
+            fallbackWall = Wad.FindRes("WALL22_1");
+            if (fallbackWall < 0) fallbackWall = Wad.FindRes("WALL23_1");
+
+            return fallbackWall;
+        }
+
         public static void Load(BinReader r)
         {
+            MissingTextures.Clear();
+
             SkyType = r.Int();
             for (int i = 1; i < 256; ++i)
             {
@@ -90,8 +135,17 @@ namespace DPTDOOM2D.Game
                 }
                 else
                 {
-                    WalH[i] = Wad.GetResId(s);
-                    WalP[i] = Res.Img(WalH[i]);
+                    int id = ResolveWall(s);
+                    if (id < 0)
+                    {
+                        WalH[i] = -1;
+                        WalP[i] = null;
+                    }
+                    else
+                    {
+                        WalH[i] = id;
+                        WalP[i] = Res.Img(id);
+                    }
                 }
             }
             for (int i = 0; i < 256; ++i) WalF[i] = r.Int();
@@ -121,7 +175,18 @@ namespace DPTDOOM2D.Game
 
         static void SetSky(string name)
         {
-            horiz = Res.Img(Wad.GetResId(name));
+            int id = Wad.FindRes(name);
+            if (id < 0)
+            {
+                // A map can name a sky the WAD set does not carry (RSKY3 and up
+                // only exist in some packs). Falling back to the first sky keeps
+                // the level playable instead of failing the whole load.
+                Log.Warn("sky not found: " + name + ", using RSKY1");
+                id = Wad.FindRes("RSKY1");
+            }
+
+            horiz = id < 0 ? null : Res.Img(id);
+            WHoriz = horiz != null;
         }
 
         public static void Adjust()

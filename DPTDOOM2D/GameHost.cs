@@ -38,9 +38,11 @@ namespace DPTDOOM2D
 
             Wad.Startup();
             Wad.AddWad(Path.Combine(Program.DataDirectory, "doom2d.wad"));
-            for (int i = 0; i < Config.ExtraWads.Count; ++i)
-                if (File.Exists(Config.ExtraWads[i])) Wad.AddWad(Config.ExtraWads[i]);
+            Program.AddExtraWads();
             Wad.InitWads();
+
+            Log.Info("data: " + Program.DataDirectory + ", " + Wad.Entries.Count + " resources");
+
             Palette.Load();
             Palette.SetGamma(Config.Gamma);
 
@@ -52,7 +54,18 @@ namespace DPTDOOM2D
             Music.Volume(Music.MusVol);
             Music.Init();
 
+            // main.c: F_loadmus("MENU"); S_startmusic(0) — the title screen has
+            // music, and the track stays on until a map loads its own.
+            Music.Load("MENU");
+            Music.Start(0);
+
             DGame.Init();
+
+            // The config file's key bindings are applied *after* Game.Init(),
+            // because Init() writes the defaults from main.c and would otherwise
+            // overwrite everything the player set in default.cfg.
+            Config.ApplyBindings();
+
             World.LoadLightningSounds();
 
             // A network session starts before the window so a refused connection
@@ -73,16 +86,24 @@ namespace DPTDOOM2D
 
             window = new Win32Window(Program.Title, Vga.SCRW, Vga.SCRH,
                 Config.Scale, Config.Fullscreen);
+            window.Stretch = Config.StretchMode;
+
             presenter = new Presenter(Vga.SCRW, Vga.SCRH);
 
             overlay = new Overlay(window);
             overlay.Scale = Config.Scale;
             overlay.Fullscreen = Config.Fullscreen;
-            window.OverlayPainter = (dc, w, h) => overlay.Draw(dc, w, h, fps);
+            overlay.Stretch = (int)Config.StretchMode;
+            overlay.PaletteLevel = Config.Gamma;
+            window.OverlayPainter = PaintOverlay;
 
-            overlay.Log("DPT.DOOM 2D started");
-            overlay.Log("wad: doom2d.wad, music: " + (Music.IsPlaying ? "on" : "off"));
-            if (Net.NetInput.Active) overlay.Log("net: " + Net.NetInput.Status());
+            overlay.AddLog("DPT.DOOM 2D started");
+            overlay.AddLog("video: " + Config.StretchName(overlay.Stretch)
+                + ", " + (Config.Scale == 0 ? "fit" : Config.Scale + "x")
+                + (Config.Fullscreen ? ", fullscreen" : ""));
+            overlay.AddLog("audio: " + (AudioSystem.Available ? "on" : "off")
+                + ", music " + (Music.MusVol == 0 ? "muted" : Music.MusVol.ToString()));
+            if (Net.NetInput.Active) overlay.AddLog("net: " + Net.NetInput.Status());
         }
 
         public void Run()
@@ -95,32 +116,49 @@ namespace DPTDOOM2D
                 window.PumpMessages();
                 if (window.Closed) break;
 
-                Kbd.Update(window);
-
-                // The overlay sees keys first: F2 opens it, and while a settings
-                // tab is focused the game does not get the arrow keys. Whatever the
-                // overlay does not consume becomes the game's "last key", which is
-                // how menu.c reads input.
-                int gameKey = 0;
-                for (int i = 0; i < Kbd.PressedThisTick.Count; ++i)
+                // A single bad frame must not kill the game: a broken sprite or a
+                // malformed custom map ends up here, gets logged, and the loop
+                // carries on instead of taking the window down.
+                try
                 {
-                    int sym = Kbd.PressedThisTick[i];
-                    if (overlay.HandleKey(sym)) continue;
-                    if (gameKey == 0) gameKey = sym;
+                    Kbd.Update(window);
+
+                    // The overlay sees keys first: F2 opens it, and while a settings
+                    // tab is focused the game does not get the arrow keys. Whatever
+                    // the overlay does not consume becomes the game's "last key",
+                    // which is how menu.c reads input.
+                    int gameKey = 0;
+                    for (int i = 0; i < Kbd.PressedThisTick.Count; ++i)
+                    {
+                        int sym = Kbd.PressedThisTick[i];
+                        if (overlay.HandleKey(sym)) continue;
+                        if (gameKey == 0) gameKey = sym;
+                    }
+
+                    Kbd.LastKey = gameKey;
+
+                    if (!overlay.LocksInput)
+                    {
+                        RunGameTick();
+                        Music.Update();
+                    }
+
+                    Kbd.LastKey = 0;
+
+                    DGame.Draw();
+                    Present();
+                }
+                catch (Exception e)
+                {
+                    Log.Error("tick failed", e);
+                    overlay.AddLog("error: " + Log.Describe(e));
+
+                    // If the failure repeats every tick the log fills up and the
+                    // game becomes unusable; give the player a chance to quit.
+                    if (++consecutiveFailures > 20)
+                        throw new Fatal("слишком много ошибок подряд: " + Log.Describe(e));
                 }
 
-                Kbd.LastKey = gameKey;
-
-                if (!overlay.LocksInput)
-                {
-                    RunGameTick();
-                    Music.Update();
-                }
-
-                Kbd.LastKey = 0;
-
-                DGame.Draw();
-                Present();
                 // Sleep until the next tick, the way the DOS build waited on the
                 // vertical retrace: no busy loop, no drift.
                 long now = Stopwatch.GetTimestamp();
@@ -140,6 +178,21 @@ namespace DPTDOOM2D
             }
         }
 
+        private int consecutiveFailures;
+
+        /// <summary>Overlay painting, isolated so a drawing bug cannot stop the game.</summary>
+        private void PaintOverlay(IntPtr dc, int width, int height)
+        {
+            try
+            {
+                overlay.Draw(dc, width, height, fps);
+            }
+            catch (Exception e)
+            {
+                Log.Error("overlay: draw failed", e);
+            }
+        }
+
         /// <summary>
         /// One simulation tick, network-aware.
         ///
@@ -153,6 +206,7 @@ namespace DPTDOOM2D
             if (!Net.NetInput.Active)
             {
                 DGame.Act();
+                consecutiveFailures = 0;
                 return;
             }
 
@@ -164,7 +218,7 @@ namespace DPTDOOM2D
             {
                 // The peer is gone: stop the session and keep playing locally so
                 // the player is not left staring at a frozen window.
-                overlay.Log("network session ended");
+                overlay.AddLog("network session ended");
                 Net.NetInput.Stop();
                 DGame.Act();
                 return;
@@ -174,10 +228,11 @@ namespace DPTDOOM2D
 
             Net.NetInput.PublishChecksum(netTick, Net.NetProtocol.Checksum());
 
-            if (Net.NetInput.Desync) overlay.Log("DESYNC detected - see the Log tab");
-            if (netTick % 20 == 0) Net.NetInput.Session.SendPing();
+            if (Net.NetInput.Desync) overlay.AddLog("DESYNC detected - see the Log tab");
+            if (netTick % 20 == 0 && Net.NetInput.Session != null) Net.NetInput.Session.SendPing();
 
             netTick++;
+            consecutiveFailures = 0;
         }
 
         private int netTick;
@@ -206,23 +261,34 @@ namespace DPTDOOM2D
 
         public void Screenshot()
         {
-            string dir = Path.Combine(Program.DataDirectory, "Screenshots");
-            Directory.CreateDirectory(dir);
+            try
+            {
+                string dir = Path.Combine(Program.DataDirectory, "Screenshots");
+                Directory.CreateDirectory(dir);
 
-            int n = 1;
-            string path;
-            do { path = Path.Combine(dir, string.Format("shot{0:0000}.bmp", n++)); }
-            while (File.Exists(path));
+                int n = 1;
+                string path;
+                do { path = Path.Combine(dir, string.Format("shot{0:0000}.bmp", n++)); }
+                while (File.Exists(path));
 
-            presenter.SaveBmp(path);
-            overlay.Log("screenshot: " + Path.GetFileName(path));
+                presenter.SaveBmp(path);
+                overlay.AddLog("screenshot: " + Path.GetFileName(path));
+                Log.Info("screenshot: " + path);
+            }
+            catch (Exception e)
+            {
+                Log.Error("screenshot failed", e);
+            }
         }
 
         public void Dispose()
         {
             running = false;
-            Music.Free();
-            Sound.Done();
+
+            try { Music.Free(); } catch (Exception e) { Log.Warn("music shutdown: " + Log.Describe(e)); }
+            try { Sound.Done(); } catch (Exception e) { Log.Warn("sound shutdown: " + Log.Describe(e)); }
+            try { Net.NetInput.Stop(); } catch (Exception e) { Log.Warn("net shutdown: " + Log.Describe(e)); }
+
             presenter.Dispose();
             window.Dispose();
         }

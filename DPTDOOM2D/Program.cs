@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using DPTDOOM2D.Engine;
 using DPTDOOM2D.Game;
@@ -34,14 +35,35 @@ namespace DPTDOOM2D
         [STAThread]
         public static int Main(string[] args)
         {
+            Log.Start();
+            Log.Info("DPT.DOOM 2D starting, " + Environment.OSVersion.VersionString
+                + ", .NET " + Environment.Version);
+
             try
             {
-                return Run(args);
+                int code = Run(args);
+                Log.Info("exit code " + code);
+                return code;
             }
             catch (Fatal e)
             {
+                Log.Error("fatal: " + e.Message);
                 Console.Error.WriteLine("DPT.DOOM 2D: " + e.Message);
                 return 1;
+            }
+            catch (Exception e)
+            {
+                // Anything that escapes a handler lands here: print it, log the
+                // stack, and exit with a code instead of a Windows crash dialog.
+                Log.Error("unhandled exception", e);
+                Console.Error.WriteLine("DPT.DOOM 2D: " + Log.Describe(e));
+                Console.Error.WriteLine(e.StackTrace);
+                return 2;
+            }
+            finally
+            {
+                Log.Info("log written to " + (Log.FilePath ?? "(console only)"));
+                Log.Stop();
             }
         }
 
@@ -62,6 +84,10 @@ namespace DPTDOOM2D
                     return ListResources();
                 if (args[i] == "--walls" && i + 1 < args.Length)
                     return Walls(int.Parse(args[i + 1]));
+                if (args[i] == "--maps")
+                    return ListMaps();
+                if (args[i] == "--sounds")
+                    return CheckSounds();
                 if (args[i] == "--saveload")
                 {
                     Boot();
@@ -121,12 +147,107 @@ namespace DPTDOOM2D
             Wad.AddWad(wad);
 
             // -file <wad> from the command line, exactly as in files.c.
-            for (int i = 0; i < Config.ExtraWads.Count; ++i)
-                if (File.Exists(Config.ExtraWads[i])) Wad.AddWad(Config.ExtraWads[i]);
+            AddExtraWads();
 
             Wad.InitWads();
             Palette.Load();
             Palette.SetGamma(Config.Gamma);
+        }
+
+        /// <summary>
+        /// Adds the extra WADs: the ones named with -file, then the map pack
+        /// chosen with -map-pack out of Data/Maps.
+        ///
+        /// The Maps folder is a *library*, not a load list: every pack in it
+        /// defines its own MAP01.., so loading all of them at once would leave
+        /// whichever happened to be read last. One pack is loaded per run, which
+        /// is also what makes custom maps a drop-in feature — copy a WAD into the
+        /// folder and it shows up in the launcher's list.
+        /// </summary>
+        public static void AddExtraWads()
+        {
+            for (int i = 0; i < Config.ExtraWads.Count; ++i)
+            {
+                string path = Config.ExtraWads[i];
+                if (!File.Exists(path))
+                {
+                    Log.Warn("wad not found: " + path);
+                    continue;
+                }
+
+                try
+                {
+                    Wad.AddWad(path);
+                    Log.Info("wad: " + path);
+                }
+                catch (Exception e)
+                {
+                    Log.Error("cannot load " + path, e);
+                }
+            }
+
+            if (string.IsNullOrEmpty(Config.MapPack)) return;
+
+            string pack = FindMapPack(Config.MapPack);
+            if (pack == null)
+            {
+                Log.Warn("map pack not found: " + Config.MapPack);
+                return;
+            }
+
+            try
+            {
+                Wad.AddWad(pack);
+                Log.Info("map pack: " + Path.GetFileName(pack));
+            }
+            catch (Exception e)
+            {
+                Log.Error("cannot load map pack " + pack, e);
+            }
+        }
+
+        /// <summary>Where custom map packs live.</summary>
+        public static string MapsDirectory
+        {
+            get { return Path.Combine(DataDirectory, "Maps"); }
+        }
+
+        /// <summary>Every WAD in the map library, sorted; empty when there is none.</summary>
+        public static string[] ListMapPacks()
+        {
+            try
+            {
+                if (!Directory.Exists(MapsDirectory)) return new string[0];
+
+                string[] files = Directory.GetFiles(MapsDirectory, "*.wad");
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                return files;
+            }
+            catch (Exception e)
+            {
+                Log.Warn("cannot list " + MapsDirectory + ": " + Log.Describe(e));
+                return new string[0];
+            }
+        }
+
+        /// <summary>Resolves a pack name (with or without ".wad", any case) to a path.</summary>
+        public static string FindMapPack(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+
+            string[] files = ListMapPacks();
+
+            for (int i = 0; i < files.Length; ++i)
+                if (string.Equals(Path.GetFileName(files[i]), name, StringComparison.OrdinalIgnoreCase))
+                    return files[i];
+
+            string withExtension = name.EndsWith(".wad", StringComparison.OrdinalIgnoreCase) ? name : name + ".wad";
+
+            for (int i = 0; i < files.Length; ++i)
+                if (string.Equals(Path.GetFileName(files[i]), withExtension, StringComparison.OrdinalIgnoreCase))
+                    return files[i];
+
+            return null;
         }
 
         static string LocateData()
@@ -163,6 +284,53 @@ namespace DPTDOOM2D
                 Console.WriteLine(string.Format("{0,5} {1,-8} {2,8} {3,8}",
                     i, Wad.GetResName(i), Wad.Entries[i].Offset, Wad.GetResLen(i)));
             return 0;
+        }
+
+        /// <summary>--maps: the custom map library, then the maps in the loaded WAD set.</summary>
+        static int ListMaps()
+        {
+            string[] packs = ListMapPacks();
+
+            if (packs.Length > 0)
+            {
+                Console.WriteLine("custom map packs in " + MapsDirectory + ":");
+                for (int i = 0; i < packs.Length; ++i)
+                    Console.WriteLine("  " + Path.GetFileName(packs[i]));
+                Console.WriteLine("  (pick one with -map-pack <name>)");
+                Console.WriteLine();
+            }
+
+            Boot();
+
+            int count = 0;
+            for (int i = 0; i < Wad.ResCount; ++i)
+            {
+                string name = Wad.GetResName(i);
+                if (!name.StartsWith("MAP", StringComparison.Ordinal) || name.Length != 5) continue;
+
+                int number;
+                if (!int.TryParse(name.Substring(3), out number)) continue;
+
+                Console.WriteLine(string.Format("{0} {1,8} bytes", name, Wad.GetResLen(i)));
+                ++count;
+            }
+
+            Console.WriteLine(count + " map(s)");
+            return count > 0 ? 0 : 1;
+        }
+
+        /// <summary>--sounds: every sound lump has to parse into playable data.</summary>
+        static int CheckSounds()
+        {
+            Boot();
+
+            int total, failed, looped, peak;
+            int ok = Sound.Diagnose(out total, out failed, out looped, out peak);
+
+            Console.WriteLine(string.Format("sounds: {0} total, {1} ok, {2} failed, {3} looped, peak {4}",
+                total, ok, failed, looped, peak));
+
+            return failed == 0 && ok > 0 ? 0 : 1;
         }
 
         /// <summary>--walls &lt;map&gt;: what the map actually references.</summary>

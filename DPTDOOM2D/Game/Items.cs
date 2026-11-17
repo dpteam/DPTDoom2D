@@ -144,6 +144,8 @@ namespace DPTDOOM2D.Game
             if (blk.T != MapBlockType.Thing) return false;
 
             int m = 0;
+            bool overflow = false;
+
             for (int i = 0; blk.Sz > 0; ++i, blk.Sz -= 8)
             {
                 short x = r.Short();
@@ -151,21 +153,64 @@ namespace DPTDOOM2D.Game
                 short t = r.Short();
                 ushort f = r.UShort();
 
+                // A map may carry more things than the fixed table holds (the
+                // custom packs do). Drop the surplus instead of walking off the
+                // array: the level still plays, just with fewer decorations.
+                if (i >= MaxItem) { overflow = true; continue; }
+
                 it[i].O.X = x; it[i].O.Y = y;
                 it[i].T = t; it[i].S = f;
                 if (it[i].T == 0) break;
-                if ((it[i].S & ThingType.Dm) != 0 && !Game.Dm) it[i].T = 0;
                 m = i + 1;
             }
+
+            if (overflow)
+                Log.Warn("map has more than " + MaxItem + " things, the surplus was ignored");
+
+            // Count the spawn points before deciding anything. Most of the custom
+            // packs in Data/Maps are deathmatch-only: they carry DM starts and no
+            // single-player start at all, and the original engine simply died on
+            // them ("Предмет игрок_1 не найден"). A map that loads and plays is
+            // more useful than a fatal error, so the mode follows the map.
+            int dmStarts = 0;
+            bool hasPlr1 = false, hasPlr2 = false;
+
+            for (int i = 0; i < m; ++i)
+            {
+                if (it[i].T == ThingType.Plr1) hasPlr1 = true;
+                else if (it[i].T == ThingType.Plr2) hasPlr2 = true;
+                else if (it[i].T == ThingType.DmStart) ++dmStarts;
+            }
+
+            if (!Game.Dm && !hasPlr1 && dmStarts > 0)
+            {
+                Game.Dm = true;
+                Log.Warn("map has no single-player start, switching to deathmatch");
+            }
+
+            // DM-only things are removed outside deathmatch, as in the original.
+            for (int i = 0; i < m; ++i)
+                if ((it[i].S & ThingType.Dm) != 0 && !Game.Dm) it[i].T = 0;
 
             // Player start 1.
             int j = -1;
             for (int i = 0; i < m; ++i) if (it[i].T == ThingType.Plr1) { j = i; it[i].T = 0; }
             if (!Game.Dm)
             {
-                if (j == -1) throw new Fatal("Предмет игрок_1 не найден");
-                Game.DmPos[0].X = it[j].O.X; Game.DmPos[0].Y = it[j].O.Y;
-                Game.DmPos[0].D = it[j].S & ThingType.Dir;
+                if (j == -1)
+                {
+                    // No start and no DM starts either: put the player in the
+                    // middle of the map rather than refusing to load it.
+                    Log.Warn("map has no player start, spawning at the centre");
+                    Game.DmPos[0].X = World.FLDW * World.CELW / 2;
+                    Game.DmPos[0].Y = World.FLDH * World.CELH / 2;
+                    Game.DmPos[0].D = 0;
+                }
+                else
+                {
+                    Game.DmPos[0].X = it[j].O.X; Game.DmPos[0].Y = it[j].O.Y;
+                    Game.DmPos[0].D = it[j].S & ThingType.Dir;
+                }
             }
 
             // Player start 2.
@@ -173,9 +218,21 @@ namespace DPTDOOM2D.Game
             for (int i = 0; i < m; ++i) if (it[i].T == ThingType.Plr2) { j = i; it[i].T = 0; }
             if (!Game.Dm && Game.TwoPl)
             {
-                if (j == -1) throw new Fatal("Предмет игрок_2 не найден");
-                Game.DmPos[1].X = it[j].O.X; Game.DmPos[1].Y = it[j].O.Y;
-                Game.DmPos[1].D = it[j].S & ThingType.Dir;
+                if (j == -1)
+                {
+                    // Cooperative on a map with one start: both players share it,
+                    // which is what the original did for the second player when
+                    // the map had no PLR2 thing.
+                    Log.Warn("map has no second player start, both players share one");
+                    Game.DmPos[1].X = Game.DmPos[0].X;
+                    Game.DmPos[1].Y = Game.DmPos[0].Y;
+                    Game.DmPos[1].D = Game.DmPos[0].D;
+                }
+                else
+                {
+                    Game.DmPos[1].X = it[j].O.X; Game.DmPos[1].Y = it[j].O.Y;
+                    Game.DmPos[1].D = it[j].S & ThingType.Dir;
+                }
             }
 
             // Deathmatch starts.
@@ -190,12 +247,24 @@ namespace DPTDOOM2D.Game
                     }
                     it[i].T = 0; ++j;
                 }
-            if (Game.Dm && j < 2) throw new Fatal("Меньше 2-ух точек DM");
+            if (Game.Dm && j < 1)
+            {
+                // A deathmatch map with no DM start at all: fall back to the
+                // single-player start if there is one, otherwise the centre.
+                Log.Warn("map has no deathmatch starts, using a fallback spawn");
+                Game.DmPos[0].X = World.FLDW * World.CELW / 2;
+                Game.DmPos[0].Y = World.FLDH * World.CELH / 2;
+                Game.DmPos[0].D = 0;
+                j = 1;
+            }
+
             if (Game.Dm)
             {
                 Game.DmPNum = j;
-                Game.DmPl1P = Glob.Rand(Game.DmPNum);
-                do { Game.DmPl2P = Glob.Rand(Game.DmPNum); } while (Game.DmPl2P == Game.DmPl1P);
+                Game.DmPl1P = 0;
+                // With a single spawn point the loop below would spin forever
+                // looking for a second, different one.
+                Game.DmPl2P = j > 1 ? 1 : 0;
             }
             else { Game.DmPl1P = 0; Game.DmPl2P = 1; Game.DmPNum = 2; }
 

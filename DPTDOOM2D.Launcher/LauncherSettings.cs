@@ -32,6 +32,12 @@ namespace DPTDOOM2D.Launcher
         public string PlayerName = "Player";
         public string RelaySession = "";
 
+        /// <summary>Custom map pack from Data/Maps, or empty for the built-in levels.</summary>
+        public string MapPack = "";
+
+        /// <summary>pixel | near | smooth, matching the game's -stretch switch.</summary>
+        public string Stretch = "near";
+
         private const string FileName = "launcher.cfg";
 
         public static string SettingsPath
@@ -70,6 +76,8 @@ namespace DPTDOOM2D.Launcher
                     case "use_relay": settings.UseRelay = ParseBool(value); break;
                     case "name": settings.PlayerName = value; break;
                     case "relay_session": settings.RelaySession = value; break;
+                    case "map_pack": settings.MapPack = value; break;
+                    case "stretch": settings.Stretch = value; break;
                 }
             }
 
@@ -92,6 +100,8 @@ namespace DPTDOOM2D.Launcher
             text.AppendLine("use_relay=" + (UseRelay ? "on" : "off"));
             text.AppendLine("name=" + PlayerName);
             text.AppendLine("relay_session=" + RelaySession);
+            text.AppendLine("map_pack=" + MapPack);
+            text.AppendLine("stretch=" + Stretch);
 
             File.WriteAllText(SettingsPath, text.ToString(), Encoding.UTF8);
         }
@@ -137,6 +147,19 @@ namespace DPTDOOM2D.Launcher
 
             builder.Append("-scale ").Append(Scale).Append(' ');
             if (Fullscreen) builder.Append("-fullscr ");
+            if (!string.IsNullOrEmpty(Stretch)) builder.Append("-stretch ").Append(Stretch).Append(' ');
+
+            // A map pack replaces the built-in levels, so -warp only makes sense
+            // together with one: the packs number their levels from MAP01.
+            if (!string.IsNullOrEmpty(MapPack))
+            {
+                builder.Append("-map-pack ").Append(Quote(MapPack)).Append(' ');
+                builder.Append("-warp ").Append(Map).Append(' ');
+            }
+            else
+            {
+                builder.Append("-warp ").Append(Map).Append(' ');
+            }
 
             if (TwoPlayers)
             {
@@ -153,6 +176,30 @@ namespace DPTDOOM2D.Launcher
             }
 
             return builder.ToString().TrimEnd();
+        }
+
+        /// <summary>WADs available in the game's Data/Maps folder, as plain names.</summary>
+        public static string[] FindMapPacks(string gamePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(gamePath)) return new string[0];
+
+                string directory = Path.Combine(Path.GetDirectoryName(gamePath), "Data", "Maps");
+                if (!Directory.Exists(directory)) return new string[0];
+
+                string[] files = Directory.GetFiles(directory, "*.wad");
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+                string[] names = new string[files.Length];
+                for (int i = 0; i < files.Length; ++i) names[i] = Path.GetFileName(files[i]);
+
+                return names;
+            }
+            catch
+            {
+                return new string[0];
+            }
         }
 
         private static string Quote(string value)

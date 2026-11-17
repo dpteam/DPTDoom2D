@@ -374,7 +374,7 @@ namespace DPTDOOM2D.Game
                     return;
 
                 case GsInter:
-                    if (Kbd.Keys[Kbd.SDLK_SPACE] || Kbd.Keys[Kbd.SDLK_RETURN] || Kbd.Keys[Kbd.SDLK_KP_ENTER])
+                    if (Kbd.Down(Kbd.SDLK_SPACE) || Kbd.Down(Kbd.SDLK_RETURN) || Kbd.Down(Kbd.SDLK_KP_ENTER))
                         Start();
                     return;
             }

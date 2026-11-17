@@ -199,72 +199,52 @@ namespace DPTDOOM2D
             return 0;
         }
 
-        /// <summary>--music &lt;track&gt;: parse a track and render a second of it, for the audio path.</summary>
+        /// <summary>
+        /// --music &lt;track&gt;: load a track the way the game does (file first, then
+        /// the DMM song inside the WAD) and render a second of it.
+        ///
+        /// This is the audio path's only automated check: if the replayer, the
+        /// transliteration table or the DMM converter breaks, the peak goes to
+        /// zero and the build fails.
+        /// </summary>
         public static int MusicCheck(string track)
         {
             Vga.Init(320, 200);
             Glob.Reset(Seed);
 
-            string path = Music.TrackPath(track);
-            if (!System.IO.File.Exists(path))
+            Music.Init();
+            Music.Load(track);
+
+            if (!Music.IsPlaying)
             {
-                Console.WriteLine("music: " + path + " not found");
+                Console.WriteLine("music: " + Music.Describe(track) + " did not load");
                 return 1;
             }
 
-            var module = Audio.XmModule.Load(path);
-            if (module == null)
-            {
-                Console.WriteLine("music: " + track + " is not a valid XM module");
-                return 1;
-            }
-
-            var player = new Audio.XmPlayer(module);
             var buffer = new float[AudioOut.Channels * 512];
             int frames = 0;
             double sum = 0;
             int peak = 0;
 
-            if (Environment.GetEnvironmentVariable("D2D_MUSIC_DEBUG") != null)
-            {
-                Console.WriteLine("length=" + module.Length + " orders=" + module.Orders[0] + "," + module.Orders[1]
-                    + " speed=" + module.InitialSpeed + " bpm=" + module.InitialBpm
-                    + " linear=" + module.LinearFrequency);
-                for (int i = 0; i < module.Instruments.Length; ++i)
-                {
-                    var ins = module.Instruments[i];
-                    int points = ins.Samples.Length > 0 ? ins.Samples[0].Data.Length : 0;
-                    Console.WriteLine("  inst " + i + ": samples=" + ins.Samples.Length + " points=" + points
-                        + " keymap0=" + ins.KeyMap[0]);
-                }
-                if (module.Patterns.Length > 0)
-                {
-                    var pat = module.Patterns[0];
-                    Console.WriteLine("  pattern0 rows=" + pat.Rows + " cells=" + pat.Note.Length);
-                    for (int c = 0; c < Math.Min(12, pat.Note.Length); ++c)
-                        Console.Write("    cell " + c + ": note=" + pat.Note[c] + " ins=" + pat.Instrument[c]
-                            + " vol=" + pat.Volume[c] + " fx=" + pat.Effect[c] + "/" + pat.Parameter[c] + "\n");
-                }
-            }
-
             for (int block = 0; block < 43; ++block) // ~1 second at 22050 Hz
             {
                 Array.Clear(buffer, 0, buffer.Length);
-                player.Render(buffer, 512);
+                Music.RenderForTest(buffer, 512);
+
                 for (int i = 0; i < buffer.Length; ++i)
                 {
                     double value = Math.Abs(buffer[i]);
                     sum += value;
                     if (value > peak / 32768.0) peak = (int)(value * 32768);
                 }
+
                 frames += 512;
             }
 
             Console.WriteLine(string.Format(
-                "music {0}: '{1}', {2} ch, {3} patterns, {4} instruments, avg {5:0.0000}, peak {6}, voices {7}",
-                track, module.Name, module.ChannelCount, module.Patterns.Length,
-                module.Instruments.Length, sum / (frames * AudioOut.Channels), peak,
-                player.ActiveVoices));
+                "music {0}: '{1}' from {2}, avg {3:0.0000}, peak {4}",
+                Music.Describe(track), Music.TrackName, Music.Source,
+                sum / (frames * AudioOut.Channels), peak));
 
             return peak > 0 ? 0 : 1;
         }

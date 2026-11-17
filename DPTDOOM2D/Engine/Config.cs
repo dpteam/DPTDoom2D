@@ -28,6 +28,7 @@ namespace DPTDOOM2D.Engine
             public Action<string> SetString;
             public Action<string> SetKey;
             public Action<bool> SetBool;
+            public string Binding;
             public bool Done;       // already set by an earlier pass
         }
 
@@ -43,11 +44,60 @@ namespace DPTDOOM2D.Engine
         public static int Height = 400;
 
         /// <summary>
-        /// Window scale: 1..6 for an integer multiple of the 400x300 framebuffer,
-        /// 0 to fit the window. The game itself always renders at 400x300, exactly
-        /// like the DOS original's 320x200 doubled by the VGA mode.
+        /// Window scale: 1..6 for an integer multiple of the 320x200 framebuffer,
+        /// 0 to fit the window. The game itself always renders at 320x200, exactly
+        /// like the DOS original.
         /// </summary>
         public static int Scale = 2;
+
+        /// <summary>
+        /// How the frame fills the window: "pixel" (integer, letterboxed),
+        /// "near" (stretch, nearest neighbour) or "smooth" (stretch, bilinear).
+        /// The stretch modes are what make full screen look right: pixel perfect
+        /// leaves black bars on a 16:9 display, the other two fill it.
+        /// </summary>
+        public static string Stretch = "near";
+
+        /// <summary>Custom map pack from Data/Maps, or empty for the built-in levels.</summary>
+        public static string MapPack = "";
+
+        public static Win32.Win32Window.StretchMode StretchMode
+        {
+            get
+            {
+                switch (Stretch)
+                {
+                    case "pixel": return Win32.Win32Window.StretchMode.PixelPerfect;
+                    case "smooth": return Win32.Win32Window.StretchMode.Smooth;
+                    default: return Win32.Win32Window.StretchMode.Nearest;
+                }
+            }
+        }
+
+        public static string StretchName(int mode)
+        {
+            switch (mode)
+            {
+                case 0: return "pixel perfect";
+                case 2: return "smooth";
+                default: return "nearest";
+            }
+        }
+
+        /// <summary>Accepts "pixel", "pixel perfect", "near", "nearest", "smooth", "linear".</summary>
+        public static string NormalizeStretch(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "near";
+
+            string v = value.Trim().ToLowerInvariant().Replace(" ", "").Replace("-", "").Replace("_", "");
+
+            if (v.StartsWith("pixel", StringComparison.Ordinal) || v == "perfect" || v == "integer")
+                return "pixel";
+            if (v.StartsWith("smooth", StringComparison.Ordinal) || v == "linear" || v == "bilinear")
+                return "smooth";
+
+            return "near";
+        }
 
         /// <summary>Network options, parsed from the same command line as everything else.</summary>
         public sealed class NetSettings
@@ -88,29 +138,39 @@ namespace DPTDOOM2D.Engine
             AddNumber("width", "screen_width", v => Width = v);
             AddNumber("height", "screen_height", v => Height = v);
             AddNumber("scale", "window_scale", v => { Scale = v; ScaleExplicit = true; });
+            AddString("stretch", "stretch", v => Stretch = NormalizeStretch(v));
+
+            // -map-pack picks one WAD out of Data/Maps; -warp then picks the level
+            // inside it. Both are plain options, not config-file settings: a map
+            // pack belongs to a session, not to the installation.
+            AddString("map-pack", "map_pack", v => MapPack = v);
             AddSwitch(null, "music_random", v => Game.Game.MusicRandom = v);
             AddNumber(null, "music_time", v => Game.Game.MusicTime = v);
             AddNumber(null, "music_fade", v => Game.Game.MusicFade = v);
 
-            AddKey(null, "pl1_left", k => Game.Game.Pl1.Kl = k);
-            AddKey(null, "pl1_right", k => Game.Game.Pl1.Kr = k);
-            AddKey(null, "pl1_up", k => Game.Game.Pl1.Ku = k);
-            AddKey(null, "pl1_down", k => Game.Game.Pl1.Kd = k);
-            AddKey(null, "pl1_jump", k => Game.Game.Pl1.Kj = k);
-            AddKey(null, "pl1_fire", k => Game.Game.Pl1.Kf = k);
-            AddKey(null, "pl1_next", k => Game.Game.Pl1.Kwr = k);
-            AddKey(null, "pl1_prev", k => Game.Game.Pl1.Kwl = k);
-            AddKey(null, "pl1_use", k => Game.Game.Pl1.Kp = k);
+            // Key bindings are collected, not applied: Game.Init() runs later and
+            // would overwrite them with its defaults. Config.ApplyBindings() is
+            // called after Init() so the file wins, which is what a player editing
+            // default.cfg expects.
+            AddKey(null, "pl1_left", "pl1_left");
+            AddKey(null, "pl1_right", "pl1_right");
+            AddKey(null, "pl1_up", "pl1_up");
+            AddKey(null, "pl1_down", "pl1_down");
+            AddKey(null, "pl1_jump", "pl1_jump");
+            AddKey(null, "pl1_fire", "pl1_fire");
+            AddKey(null, "pl1_next", "pl1_next");
+            AddKey(null, "pl1_prev", "pl1_prev");
+            AddKey(null, "pl1_use", "pl1_use");
 
-            AddKey(null, "pl2_left", k => Game.Game.Pl2.Kl = k);
-            AddKey(null, "pl2_right", k => Game.Game.Pl2.Kr = k);
-            AddKey(null, "pl2_up", k => Game.Game.Pl2.Ku = k);
-            AddKey(null, "pl2_down", k => Game.Game.Pl2.Kd = k);
-            AddKey(null, "pl2_jump", k => Game.Game.Pl2.Kj = k);
-            AddKey(null, "pl2_fire", k => Game.Game.Pl2.Kf = k);
-            AddKey(null, "pl2_next", k => Game.Game.Pl2.Kwr = k);
-            AddKey(null, "pl2_prev", k => Game.Game.Pl2.Kwl = k);
-            AddKey(null, "pl2_use", k => Game.Game.Pl2.Kp = k);
+            AddKey(null, "pl2_left", "pl2_left");
+            AddKey(null, "pl2_right", "pl2_right");
+            AddKey(null, "pl2_up", "pl2_up");
+            AddKey(null, "pl2_down", "pl2_down");
+            AddKey(null, "pl2_jump", "pl2_jump");
+            AddKey(null, "pl2_fire", "pl2_fire");
+            AddKey(null, "pl2_next", "pl2_next");
+            AddKey(null, "pl2_prev", "pl2_prev");
+            AddKey(null, "pl2_use", "pl2_use");
 
             AddString("config", null, v => CfgFile = v);
 
@@ -173,14 +233,52 @@ namespace DPTDOOM2D.Engine
             table.Add(e);
         }
 
-        static void AddKey(string arg, string cfg, Action<int> apply)
+        static void AddKey(string arg, string cfg, string binding)
         {
             Entry e = new Entry();
-            e.Arg = arg; e.Cfg = cfg; e.Kind = Kind.Key;
-            e.SetKey = v => { int k = KeyByName(v); if (k != 0) apply(k); };
+            e.Arg = arg; e.Cfg = cfg; e.Kind = Kind.Key; e.Binding = binding;
+            e.SetKey = v =>
+            {
+                int k = KeyByName(v);
+                if (k != 0) PendingKeys[binding] = k;
+            };
             table.Add(e);
         }
 
+        /// <summary>Key bindings read from the config file, waiting for Game.Init().</summary>
+        static readonly Dictionary<string, int> PendingKeys = new Dictionary<string, int>();
+
+        /// <summary>
+        /// Applies the bindings from default.cfg on top of the defaults from
+        /// main.c. Called once, after Game.Init() has set those defaults.
+        /// </summary>
+        public static void ApplyBindings()
+        {
+            foreach (KeyValuePair<string, int> pair in PendingKeys)
+                AssignBinding(pair.Key, pair.Value);
+
+            if (PendingKeys.Count > 0)
+                Log.Info("config: " + PendingKeys.Count + " key binding(s) from " + CfgFile);
+        }
+
+        private static void AssignBinding(string name, int k)
+        {
+            PlayerData p = name.StartsWith("pl2_", StringComparison.Ordinal) ? Game.Game.Pl2 : Game.Game.Pl1;
+            string action = name.Substring(4);
+
+            switch (action)
+            {
+                case "left": p.Kl = k; break;
+                case "right": p.Kr = k; break;
+                case "up": p.Ku = k; break;
+                case "down": p.Kd = k; break;
+                case "jump": p.Kj = k; break;
+                case "fire": p.Kf = k; break;
+                case "next": p.Kwr = k; break;
+                case "prev": p.Kwl = k; break;
+                case "use": p.Kp = k; break;
+            }
+        }
         static long ParseNumber(string s)
         {
             s = (s ?? "").Trim();
@@ -359,6 +457,23 @@ namespace DPTDOOM2D.Engine
             string n = name.Trim().ToLowerInvariant();
 
             if (n.Length == 1) return n[0];
+
+            // default.cfg writes numpad keys as [4], [/], [+], [.], which is the
+            // notation the original keyboard handler used.
+            if (n.Length == 3 && n[0] == '[' && n[2] == ']')
+            {
+                char inner = n[1];
+                if (inner >= '0' && inner <= '9') return Kbd.SDLK_KP0 + (inner - '0');
+
+                switch (inner)
+                {
+                    case '.': return Kbd.SDLK_KP_PERIOD;
+                    case '/': return Kbd.SDLK_KP_DIVIDE;
+                    case '*': return Kbd.SDLK_KP_MULTIPLY;
+                    case '-': return Kbd.SDLK_KP_MINUS;
+                    case '+': return Kbd.SDLK_KP_PLUS;
+                }
+            }
 
             switch (n)
             {
