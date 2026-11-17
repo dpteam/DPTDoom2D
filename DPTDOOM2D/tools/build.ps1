@@ -184,6 +184,11 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  music converter FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  music converter ok' -ForegroundColor DarkGray }
 
+		# Sound converter: a WAV becomes a DMI and the game's own parser reads it.
+		& $exe --sndcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  sound converter FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  sound converter ok' -ForegroundColor DarkGray }
+
 		# Map writer: every map in the game and in the 166 custom packs has to survive
 		# a read-write-read round trip byte for byte. The editor cannot save a map
 		# until this passes, because a writer that is "almost right" corrupts levels.

@@ -102,6 +102,8 @@ dptdoom2d.exe --netdata <master>
 dptdoom2d.exe --wadreq [candidate.wad]
 dptdoom2d.exe --muscheck
 dptdoom2d.exe --mid2dmm <in.mid> <out.dmm|out.wad>
+dptdoom2d.exe --sndcheck
+dptdoom2d.exe --wav2dmi <in.wav> <out.dmi|out.wad>
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
@@ -162,6 +164,11 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 DMM, формат Doom2D. Результат читается тем же загрузчиком, что играет WAD.
 `--muscheck` проверяет круговой путь на встроенном тестовом MIDI, включая длину
 паттерна в тиках.
+
+`--wav2dmi <in.wav> <out.dmi|out.wad>` — конвертер звука: WAV (PCM 8 и 16 бит,
+стерео сводится в моно) в DMI. Лампа называется `DS`+имя файла, потому что игра
+ищет звук именно так. `--sndcheck` проверяет круговой путь **тем же парсером**,
+которым игра грузит звуки из WAD, включая совпадение формы сигнала.
 
 `--modbuild` / `--modlist` / `--modunpack` — модкит: собрать PK3 из папки,
 посмотреть, что из него загрузится, распаковать обратно.

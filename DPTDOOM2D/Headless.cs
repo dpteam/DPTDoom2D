@@ -1123,6 +1123,160 @@ namespace DPTDOOM2D
             return data.ToArray();
         }
 
+        /// <summary>
+        /// --wav2dmi &lt;in.wav&gt; &lt;out.dmi|out.wad&gt;: a sound file becomes a DMI lump.
+        ///
+        /// The counterpart of the MIDI converter: FreeDoom's sounds are WAV and
+        /// Doom2D's are DMI, so without this a replacement data set has music and no
+        /// gunshots.
+        /// </summary>
+        public static int WavToDmiFile(string input, string output)
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine("wav2dmi: " + input + " не найден");
+                return 1;
+            }
+
+            string reason;
+            Audio.DmiSample sample = Audio.WavFile.Read(File.ReadAllBytes(input), out reason);
+
+            if (sample == null)
+            {
+                Console.Error.WriteLine("wav2dmi: " + Path.GetFileName(input) + ": " + reason);
+                return 1;
+            }
+
+            bool truncated = !Audio.DmiWriter.Fits(sample);
+            byte[] data = Audio.DmiWriter.Write(sample);
+
+            // The game looks a sound up as "DS" + name, so a lump called SHOT would
+            // never be found: the converter names it the way the engine asks for it.
+            string lump = Path.GetFileNameWithoutExtension(input).ToUpperInvariant();
+            if (lump.Length > 8) lump = lump.Substring(0, 8);
+            if (!lump.StartsWith("DS", StringComparison.Ordinal)) lump = "DS" + lump;
+            if (lump.Length > 8) lump = lump.Substring(0, 8);
+
+            if (output.EndsWith(".wad", StringComparison.OrdinalIgnoreCase))
+            {
+                var lumps = new List<KeyValuePair<string, byte[]>>();
+                lumps.Add(new KeyValuePair<string, byte[]>(lump, data));
+
+                if (!Prototypes.WadBuilder.WriteLumps(output, lumps)) return 1;
+            }
+            else
+            {
+                File.WriteAllBytes(output, data);
+            }
+
+            Console.WriteLine("wav2dmi: " + Path.GetFileName(input) + " -> " + Path.GetFileName(output)
+                + " (" + lump + ", " + sample.Length + " сэмплов, " + sample.Rate + " Гц"
+                + (truncated ? ", обрезано до " + Audio.DmiWriter.MaxLength : "") + ")");
+
+            return 0;
+        }
+
+        /// <summary>
+        /// --sndcheck: a WAV becomes a DMI and the game's own parser reads it back.
+        ///
+        /// A writer checked by a different reader proves nothing, so this goes through
+        /// Sound.TryParse — the same function that loads every DS lump out of the WAD.
+        /// </summary>
+        public static int SoundConvertCheck()
+        {
+            int failed = 0;
+
+            byte[] wav = BuildTestWav();
+            string reason;
+
+            Audio.DmiSample sample = Audio.WavFile.Read(wav, out reason);
+            failed += Check("the test WAV parses", sample != null);
+
+            if (sample == null)
+            {
+                Console.WriteLine("  " + reason);
+                Console.WriteLine("sounds: 1 check failed");
+                return 1;
+            }
+
+            failed += Check("16-bit becomes 8-bit", sample.Length == 1000);
+            failed += Check("the rate survives", sample.Rate == 11025);
+
+            byte[] dmi = Audio.DmiWriter.Write(sample);
+
+            int length, rate, loopStart, loopLength;
+            bool parsed = Sound.TryParse(dmi, out length, out rate, out loopStart, out loopLength);
+
+            failed += Check("the DMI parses with the game's own reader", parsed);
+            failed += Check("the sample count survives", length == sample.Length);
+            failed += Check("the rate survives the round trip", rate == sample.Rate);
+
+            // A full-scale square wave has to come back with the same sign pattern:
+            // a converter that shifted the phase or inverted the polarity would still
+            // "parse", and would sound wrong in a way nobody could describe.
+            if (parsed)
+            {
+                bool sameSign = true;
+
+                for (int i = 0; i < sample.Length && i < length; ++i)
+                {
+                    sbyte fromFile = (sbyte)dmi[8 + i];
+
+                    // The writer stores exactly what the sample holds.
+                    if (fromFile != sample.Data[i]) { sameSign = false; break; }
+                }
+
+                failed += Check("the waveform is unchanged", sameSign);
+            }
+
+            Console.WriteLine("  " + sample.Length + " сэмплов, " + sample.Rate + " Гц, " + dmi.Length + " байт");
+
+            Console.WriteLine(failed == 0
+                ? "sounds: WAV -> DMI round trip ok"
+                : "sounds: " + failed + " check(s) failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// A minimal 16-bit mono WAV: 1000 samples of a square wave at 11025 Hz.
+        ///
+        /// Built by hand so the check cannot drift from the parser: this is the
+        /// smallest file a converter has to accept.
+        /// </summary>
+        private static byte[] BuildTestWav()
+        {
+            int samples = 1000;
+            int rate = 11025;
+            int dataSize = samples * 2;
+
+            var data = new List<byte>(44 + dataSize);
+
+            data.AddRange(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F' });
+            data.AddRange(BitConverter.GetBytes(36 + dataSize));
+            data.AddRange(new byte[] { (byte)'W', (byte)'A', (byte)'V', (byte)'E' });
+
+            data.AddRange(new byte[] { (byte)'f', (byte)'m', (byte)'t', (byte)' ' });
+            data.AddRange(BitConverter.GetBytes(16));
+            data.AddRange(BitConverter.GetBytes((short)1));      // PCM
+            data.AddRange(BitConverter.GetBytes((short)1));      // mono
+            data.AddRange(BitConverter.GetBytes(rate));
+            data.AddRange(BitConverter.GetBytes(rate * 2));      // byte rate
+            data.AddRange(BitConverter.GetBytes((short)2));      // block align
+            data.AddRange(BitConverter.GetBytes((short)16));     // bits
+
+            data.AddRange(new byte[] { (byte)'d', (byte)'a', (byte)'t', (byte)'a' });
+            data.AddRange(BitConverter.GetBytes(dataSize));
+
+            for (int i = 0; i < samples; ++i)
+            {
+                short value = (short)((i / 25) % 2 == 0 ? 12000 : -12000);
+                data.AddRange(BitConverter.GetBytes(value));
+            }
+
+            return data.ToArray();
+        }
+
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
         private static bool Type(string text)
         {

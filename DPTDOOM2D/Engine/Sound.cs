@@ -111,8 +111,30 @@ namespace DPTDOOM2D.Engine
             sound.Rate = rate;
             sound.LoopStart = loopStart >= 0 && loopStart < length ? loopStart : 0;
             sound.LoopLength = loopLength > 0 && loopStart + loopLength <= length ? loopLength : 0;
-            sound.Name = Wad.GetResName(id);
+            sound.Name = id >= 0 ? Wad.GetResName(id) : "";
             return sound;
+        }
+
+        /// <summary>
+        /// Parses a DMI lump without a WAD, for tools and checks.
+        ///
+        /// The game's own path goes through <see cref="Get"/>, which needs a resource
+        /// id. A converter has bytes in memory and no WAD, so this exposes the same
+        /// parser: a writer verified by a different reader would prove nothing.
+        /// </summary>
+        public static bool TryParse(byte[] raw, out int length, out int rate,
+            out int loopStart, out int loopLength)
+        {
+            length = rate = loopStart = loopLength = 0;
+
+            CachedSound sound = Parse(-1, raw);
+            if (sound == null) return false;
+
+            length = sound.Data.Length;
+            rate = sound.Rate;
+            loopStart = sound.LoopStart;
+            loopLength = sound.LoopLength;
+            return true;
         }
 
         /// <summary>S_play: channel -1 means "any free one".</summary>
