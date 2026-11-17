@@ -37,7 +37,7 @@ namespace DPTDOOM2D.Shared
         public byte[] BuildFingerprint = new byte[20];
         public byte[] ResourceDigest = new byte[20];
         public string MapText = "MAP01";
-        public int Port = 5029;
+        public int Port = 5041;
         public int Players = 2;
         public int RuleBits;
         public int GameProtocol = MasterProtocol.GameProtocol;

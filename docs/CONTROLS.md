@@ -150,5 +150,12 @@ deathmatch по умолчанию выключены (`-cheat` включает
 
 ### Режимы проверки
 
-`--simulate`, `--shell`, `--saveload`, `--levelend`, `--switches`, `--walls`,
-`--music`, `--dump`, `--list` — см. [BUILDING.md](BUILDING.md).
+```
+--simulate, --shell, --saveload, --levelend, --switches, --walls,
+--music, --sounds, --cheats, --maps, --proto-list, --proto <id>,
+--modbuild, --modlist, --modunpack, --wadbuild, --wadlist,
+--dump, --list
+```
+
+Порты и брандмауэр: `tools/firewall.ps1` и `tools/run-master.ps1`
+(см. [NETWORK.md](NETWORK.md)).

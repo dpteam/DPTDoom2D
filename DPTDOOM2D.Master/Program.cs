@@ -332,7 +332,7 @@ namespace DPTDOOM2D.Master
             Console.WriteLine();
             Console.WriteLine("  --config <file>        read bind/port/lease/relay/banlist/allowlist from a file");
             Console.WriteLine("  --bind <ipv4>          listen address (default 127.0.0.1)");
-            Console.WriteLine("  --port <1..65535>      listen port (default 25135)");
+            Console.WriteLine("  --port <1..65535>      listen port (default 25145)");
             Console.WriteLine("  --lease-seconds <3..300>  listing lifetime (default 60)");
             Console.WriteLine("  --log <file>           log file (default user/dptdoom2d-master.log)");
             Console.WriteLine("  --relay                accept relay attach (host without a port forward)");

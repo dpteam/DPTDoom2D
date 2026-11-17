@@ -105,7 +105,7 @@ namespace DPTDOOM2D.Engine
             public bool Enabled;
             public bool Host;
             public string Address = "127.0.0.1";
-            public int Port = 5030;
+            public int Port = 5041;
             public string Password = "";
             public bool Deathmatch;
             public int Map = 1;

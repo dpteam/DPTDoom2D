@@ -45,7 +45,7 @@ namespace DPTDOOM2D.Shared
         public const int MaxServersPerIp = 4;
         public const int MaxBodySize = 4 + RowSize * MaxServers;
 
-        public const int DefaultPort = 25135;
+        public const int DefaultPort = 25145;
 
         public const ushort OpList = 1;
         public const ushort OpRegister = 2;

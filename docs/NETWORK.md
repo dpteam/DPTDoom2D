@@ -70,8 +70,8 @@
 ### Напрямую
 
 ```powershell
-dptdoom2d.exe -net host -port 5030 -map 1
-dptdoom2d.exe -net join -address 192.168.1.10 -port 5030
+dptdoom2d.exe -net host -port 5041 -map 1
+dptdoom2d.exe -net join -address 192.168.1.10 -port 5041
 ```
 
 Хост слушает TCP-порт и ждёт одного гостя. Подходит для LAN или для машины с
@@ -80,10 +80,10 @@ dptdoom2d.exe -net join -address 192.168.1.10 -port 5030
 ### Через мастер и релей
 
 ```powershell
-dptdoom2d-master.exe --port 25135 --relay-port 25136
+dptdoom2d-master.exe --port 25145 --relay-port 25146
 
-dptdoom2d.exe -net host -master 1.2.3.4:25135 -relay
-dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
+dptdoom2d.exe -net host -master 1.2.3.4:25145 -relay
+dptdoom2d.exe -net join -master 1.2.3.4:25145 -relay-session <id>
 ```
 
 Порядок:
@@ -101,6 +101,61 @@ dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
 
 Проброс портов не нужен: обе машины подключаются наружу. UPnP тоже не нужен.
 
+## Порты
+
+Номера специально **не совпадают с DPT.DOOM** (там 25135 / 25136 / 5029), чтобы
+оба проекта могли работать на одной машине и проброс на роутере указывал на
+нужный.
+
+| Что | Порт | Нужен снаружи |
+|---|---|---|
+| каталог мастера | **25145/tcp** | да, всегда |
+| релей | **25146/tcp** | да, если играете через NAT |
+| прямая игра (хост) | **5041/tcp** | только без релея |
+
+### Брандмауэр
+
+```powershell
+./DPTDOOM2D/tools/firewall.ps1           # добавить правила (UAC)
+./DPTDOOM2D/tools/firewall.ps1 -Status   # посмотреть, без прав
+./DPTDOOM2D/tools/firewall.ps1 -Remove   # убрать
+```
+
+Скрипт создаёт три входящих правила с префиксом `DPT.DOOM 2D`, предварительно
+удаляя одноимённые — иначе повторный запуск плодит дубликаты.
+
+### Проброс на роутере
+
+Проброс делает роутер, а не скрипт. Снаружи достаточно:
+
+```
+25145/tcp  -> компьютер с мастером
+25146/tcp  -> компьютер с мастером
+```
+
+Игровой порт пробрасывать не нужно: при игре через релей обе машины подключаются
+наружу, и мастер их соединяет.
+
+### Запуск мастера для внешнего доступа
+
+По умолчанию мастер слушает `127.0.0.1` — это безопасно, но снаружи недоступно.
+Скрипт поднимает его на `0.0.0.0` с нужными портами:
+
+```powershell
+./DPTDOOM2D/tools/run-master.ps1            # в этом окне
+./DPTDOOM2D/tools/run-master.ps1 -Firewall  # сначала правила (UAC)
+```
+
+Проверить снаружи:
+
+```powershell
+dptdoom2d.exe -net host -master play.dartpower.xyz:25145 -relay
+dptdoom2d.exe -net join -master play.dartpower.xyz:25145 -relay-session <id>
+```
+
+В лаунчере адрес мастера по умолчанию — `play.dartpower.xyz:25145`, так что
+достаточно нажать «Обновить список».
+
 ## Мастер-сервер
 
 `dptdoom2d-master.exe` — отдельная программа, протокол общий с игрой
@@ -108,8 +163,8 @@ dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
 
 | Что | По умолчанию |
 |---|---|
-| порт каталога | 25135 |
-| порт релея | 25136 |
+| порт каталога | 25145 |
+| порт релея | 25146 |
 | аренда сессии | 60 с, heartbeat раз в 30 с |
 | сессий на релее | 8 |
 | гостей на сессию | 3 |

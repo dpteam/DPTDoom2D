@@ -1,5 +1,7 @@
 # DPT.DOOM 2D
 
+[Русский](README.md) | **English**
+
 Native Win32 port of the 1996 Doom2D engine by Prikol Software. Gameplay is a
 one-to-one port; the renderer is still the original 8-bit palette software
 renderer, so the picture matches the DOS game pixel for pixel.
@@ -46,16 +48,16 @@ downloaded.
 Direct (LAN):
 
 ```powershell
-dptdoom2d.exe -net host -port 5030 -map 1
-dptdoom2d.exe -net join -address 192.168.1.10 -port 5030
+dptdoom2d.exe -net host -port 5041 -map 1
+dptdoom2d.exe -net join -address 192.168.1.10 -port 5041
 ```
 
 Through the internet, no port forwarding needed:
 
 ```powershell
-dptdoom2d-master.exe --port 25135 --relay-port 25136
-dptdoom2d.exe -net host -master 1.2.3.4:25135 -relay
-dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
+dptdoom2d-master.exe --port 25145 --relay-port 25146
+dptdoom2d.exe -net host -master 1.2.3.4:25145 -relay
+dptdoom2d.exe -net join -master 1.2.3.4:25145 -relay-session <id>
 ```
 
 Lockstep: both machines run the same world from the same RNG seed; only input

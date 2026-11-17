@@ -33,9 +33,9 @@ namespace DPTDOOM2D.Launcher
         public string Stretch = "near";
         public bool Fullscreen;
 
-        public int Port = 5030;
+        public int Port = 5041;
         public string Password = "";
-        public string Master = "127.0.0.1:25135";
+        public string Master = "play.dartpower.xyz:25145";
         public string RelaySession = "";
         public string Address = "127.0.0.1";
         public string PlayerName = "Player";
@@ -90,7 +90,7 @@ namespace DPTDOOM2D.Launcher
                         case "scale": settings.Scale = ParseInt(value, 2); break;
                         case "stretch": settings.Stretch = value; break;
                         case "fullscreen": settings.Fullscreen = ParseBool(value); break;
-                        case "port": settings.Port = ParseInt(value, 5030); break;
+                        case "port": settings.Port = ParseInt(value, 5041); break;
                         case "password": settings.Password = value; break;
                         case "master": settings.Master = value; break;
                         case "relay_session": settings.RelaySession = value; break;

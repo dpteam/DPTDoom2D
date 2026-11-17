@@ -29,7 +29,7 @@ namespace DPTDOOM2D.Master
     internal sealed class MasterConfig
     {
         public string Bind = "127.0.0.1";
-        public int Port = 25135;
+        public int Port = 25145;
         public int LeaseSeconds = 60;
         public string BanListPath;
         public string AllowListPath;

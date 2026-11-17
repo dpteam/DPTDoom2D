@@ -1,5 +1,7 @@
 <div align="center">
 
+**Русский** | [English](README.en.md)
+
 ![Титульный экран](docs/images/title.png)
 
 **Doom 2D** (Prikol Software, 1996) — переписанный на нативный Win32/C#.
@@ -168,16 +170,16 @@ dptdoom2d.exe --proto planet    # генератор планеты
 **По локальной сети** — хост ждёт, гость подключается по адресу:
 
 ```powershell
-dptdoom2d.exe -net host -port 5030 -map 1
-dptdoom2d.exe -net join -address 192.168.1.10 -port 5030
+dptdoom2d.exe -net host -port 5041 -map 1
+dptdoom2d.exe -net join -address 192.168.1.10 -port 5041
 ```
 
 **Через интернет** — мастер и релей, проброс портов не нужен:
 
 ```powershell
-dptdoom2d-master.exe --port 25135 --relay-port 25136
-dptdoom2d.exe -net host -master 1.2.3.4:25135 -relay
-dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
+dptdoom2d-master.exe --port 25145 --relay-port 25146
+dptdoom2d.exe -net host -master 1.2.3.4:25145 -relay
+dptdoom2d.exe -net join -master 1.2.3.4:25145 -relay-session <id>
 ```
 
 Хост печатает 32-символьный id сессии; его и передают гостю. Обе машины

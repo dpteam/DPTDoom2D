@@ -518,7 +518,7 @@ namespace DPTDOOM2D.Launcher
 
             if (!SplitEndpoint(string.IsNullOrEmpty(endpoint) ? settings.Master : endpoint, out host, out port))
             {
-                Send("status", "Адрес мастера должен быть вида 127.0.0.1:25135\n1");
+                Send("status", "Адрес мастера должен быть вида play.dartpower.xyz:25145\n1");
                 return;
             }
 

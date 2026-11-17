@@ -24,9 +24,9 @@
         scale: '2',
         stretch: 'near',
         fullscreen: '0',
-        port: '5030',
+        port: '5041',
         password: '',
-        master: '127.0.0.1:25135',
+        master: 'play.dartpower.xyz:25145',
         relaySession: '',
         address: '127.0.0.1',
         name: 'Player'
@@ -343,7 +343,7 @@
                 mapNumber: f[2] || '',
                 players: f[3] || '2',
                 address: f[4] || '',
-                port: f[5] || '5030',
+                port: f[5] || '5041',
                 relay: f[6] === '1',
                 id: f[7] || ''
             });
