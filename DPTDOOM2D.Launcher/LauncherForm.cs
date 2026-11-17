@@ -323,7 +323,35 @@ namespace DPTDOOM2D.Launcher
             }
 
             return Path.GetFileName(settings.GamePath) + "\n" + hint + "\n" +
-                string.Join("\t", packs) + "\n" + levels + "\n" + modRows;
+                string.Join("\t", packs) + "\n" + levels + "\n" + modRows + "\n" + DescribeDataSets();
+        }
+
+        /// <summary>
+        /// The data sets on disk, as "file=Title" pairs.
+        ///
+        /// Only what exists is listed: the choice decides which file the game boots on,
+        /// and offering a set that is not installed produces a failure at startup
+        /// instead of a game.
+        /// </summary>
+        private string DescribeDataSets()
+        {
+            if (string.IsNullOrEmpty(settings.GamePath)) return "";
+
+            string data = Path.Combine(Path.GetDirectoryName(settings.GamePath), "Data");
+            if (!Directory.Exists(data)) return "";
+
+            var rows = new StringBuilder();
+
+            for (int i = 0; i < DataSets.Files.Length; ++i)
+            {
+                string file = DataSets.Files[i];
+                if (!File.Exists(Path.Combine(data, file))) continue;
+
+                if (rows.Length > 0) rows.Append('\t');
+                rows.Append(file).Append('=').Append(DataSets.Title(file));
+            }
+
+            return rows.ToString();
         }
 
         private static string ModsDirectoryFor(string gamePath)

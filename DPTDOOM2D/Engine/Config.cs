@@ -40,6 +40,15 @@ namespace DPTDOOM2D.Engine
         public static bool Cheat;
         public static int Gamma;
         public static int Warp;
+
+        /// <summary>
+        /// The data set to boot on: "doom2d", "freedoom2d" or "aidoom2d".
+        ///
+        /// The three sets are interchangeable from the engine's point of view — same
+        /// lump names, same formats — so the choice is one file name, not a code path.
+        /// Kept as the bare name so a config file reads `main_wad=freedoom2d.wad`.
+        /// </summary>
+        public static string MainWad = "";
         public static int Width = 640;
         public static int Height = 400;
 
@@ -141,6 +150,7 @@ namespace DPTDOOM2D.Engine
             AddSwitch(null, "sky", v => Sky = v);
             AddSwitch("mon", null, v => NoMonsters = !v);
             AddNumber("gamma", "gamma", v => Gamma = v);
+            AddString("data", "main_wad", v => MainWad = v);
             AddNumber("warp", null, v => Warp = v);
             AddNumber("width", "screen_width", v => Width = v);
             AddNumber("height", "screen_height", v => Height = v);

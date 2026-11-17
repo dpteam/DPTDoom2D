@@ -55,6 +55,7 @@
     <Compile Include="..\DPTDOOM2D\Prototypes\WadBuilder.cs" Link="Prototypes\WadBuilder.cs" />
 
     <Compile Include="..\DPTDOOM2D.Shared\DataManifest.cs" Link="Shared\DataManifest.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\DataSets.cs" Link="Shared\DataSets.cs" />
     <Compile Include="..\DPTDOOM2D.Shared\MasterProtocol.cs" Link="Shared\MasterProtocol.cs" />
   </ItemGroup>
 

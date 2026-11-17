@@ -38,12 +38,25 @@ namespace DPTDOOM2D.Editor
                 if (args.Length >= 3 && args[0] == "--render")
                     return RenderToFile(args[1], args[2]);
 
-                // --shot <map> <out.bmp> [tab]: the whole editor screen without a
-                // window, one frame at 320x200. The reference screenshots came out
-                // of DOSBox, so the only way to compare them is with a picture that
-                // has no window chrome and no scaling in it.
+                // --shot <map> <out.bmp> [tab] [-cam X Y]: the whole editor screen
+                // without a window, one frame at 320x200. The reference screenshots
+                // came out of DOSBox, so the only way to compare them is with a
+                // picture that has no window chrome and no scaling in it — and the
+                // camera has to be settable, or the two show different places.
                 if (args.Length >= 3 && args[0] == "--shot")
-                    return ScreenToFile(args[1], args[2], args.Length > 3 ? args[3] : "0");
+                {
+                    int camX = -1, camY = -1;
+
+                    for (int i = 3; i + 2 < args.Length; ++i)
+                    {
+                        if (args[i] != "-cam") continue;
+
+                        int.TryParse(args[i + 1], out camX);
+                        int.TryParse(args[i + 2], out camY);
+                    }
+
+                    return ScreenToFile(args[1], args[2], args.Length > 3 ? args[3] : "0", camX, camY);
+                }
 
                 // --save <map> <out.wad>: the editor's save path without the window.
                 // It is the check that a map written here loads in the game.
@@ -453,7 +466,7 @@ namespace DPTDOOM2D.Editor
         /// so comparing against them means comparing pictures with the same
         /// properties — and a pixel-by-pixel diff is only possible this way.
         /// </summary>
-        private static int ScreenToFile(string mapName, string output, string tab)
+        private static int ScreenToFile(string mapName, string output, string tab, int camX, int camY)
         {
             int res = Wad.FindRes(mapName);
             if (res < 0)
@@ -476,13 +489,17 @@ namespace DPTDOOM2D.Editor
             if (int.TryParse(tab, out tool) && tool >= 0 && tool < 5)
                 screen.Tool = (EditorTool)tool;
 
+            if (camX >= 0 || camY >= 0) screen.CenterOn(camX, camY);
+
             // One frame, drawn exactly as the loop draws it. Draw needs a window only
             // for the mouse position, and a headless run has no mouse.
             screen.Draw(null);
 
             MapCanvas.WriteBmp(output, EditorScreen.ScreenW, EditorScreen.ScreenH);
 
-            Console.WriteLine("shot: " + mapName + " tab " + screen.Tool + " -> " + Path.GetFileName(output));
+            Console.WriteLine("shot: " + mapName + " tab " + screen.Tool
+                + " cam " + screen.CamX + "," + screen.CamY
+                + " -> " + Path.GetFileName(output));
 
             return 0;
         }

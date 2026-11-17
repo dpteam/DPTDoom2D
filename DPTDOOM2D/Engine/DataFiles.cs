@@ -26,6 +26,50 @@ namespace DPTDOOM2D.Engine
         /// <summary>Absolute paths in the order they were loaded; the order changes which resource wins.</summary>
         public static readonly List<string> Files = new List<string>();
 
+        /// <summary>
+        /// The data sets the game can boot on, in the order the launcher lists them.
+        ///
+        /// The list itself lives in Shared: the launcher offers the choice and the game
+        /// resolves it, and two copies of the list would eventually disagree.
+        /// </summary>
+        public static string[] SetFiles
+        {
+            get { return Shared.DataSets.Files; }
+        }
+
+        /// <summary>Human-readable name: DOOM2D, FREEDOOM2D, AIDOOM2D.</summary>
+        public static string SetTitle(string fileName)
+        {
+            return Shared.DataSets.Title(fileName);
+        }
+
+        /// <summary>
+        /// The path of a data set, from whatever the config or the command line said.
+        ///
+        /// Accepts "freedoom2d", "FREEDOOM2D.WAD" and a full path alike, and falls back
+        /// to doom2d.wad when nothing was asked for. The fallback matters: a config
+        /// written before this option existed has no `main_wad` line, and it must still
+        /// start the game rather than fail.
+        /// </summary>
+        public static string MainWadPath(string dataDirectory, string requested)
+        {
+            return Shared.DataSets.Resolve(dataDirectory, requested);
+        }
+
+        /// <summary>
+        /// Which data sets are actually installed, for the launcher and for the error
+        /// a missing one produces.
+        /// </summary>
+        public static List<string> InstalledSets(string dataDirectory)
+        {
+            return Shared.DataSets.Installed(dataDirectory);
+        }
+
+        public static string DescribeSets(string dataDirectory)
+        {
+            return Shared.DataSets.DescribeInstalled(dataDirectory);
+        }
+
         /// <summary>Remembers a file that took part in the load, once.</summary>
         public static void Add(string path)
         {

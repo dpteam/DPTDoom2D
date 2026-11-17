@@ -92,13 +92,22 @@ namespace DPTDOOM2D.Editor
         }
 
         /// <summary>
-        /// W_draw's horizon: RSKY1..3 stamped at a parallax offset.
+        /// W_draw's horizon.
         ///
-        /// The constants are the original's, character for character:
-        /// `127-(w_x-100)*56/(FLDW*CELW-200)` and `123-(w_y-49)*28/(FLDH*CELH-98)`.
-        /// The sky is a 256x256 picture hung near the bottom of the view, so at the
-        /// centre of a level it is off-screen entirely — which is what the DOS
-        /// editor showed too, and why an empty top of the view is not a bug.
+        /// The original calls `V_pic(127-(w_x-100)*56/600, 123-(w_y-49)*28/702, horiz)`,
+        /// and those 127 and 123 look like magic constants. They are not: they are the
+        /// **hot spot of the 1996 sky picture**, which is 256x128 with `sx=127, sy=123`.
+        /// V_pic subtracts the hot spot, so the sky's top-left lands at
+        /// `(127-127, 123-123) = (0,0)` and the whole view is covered.
+        ///
+        /// The data set this port ships has a *different* sky — 256x256 with no hot
+        /// spot at all — so the same call puts its top-left at (127,123) and only the
+        /// right-hand part of the view gets any sky. That is the "renders strangely"
+        /// this fixes: the position is computed from the picture's own hot spot, so it
+        /// works with either data set.
+        ///
+        /// The parallax itself is the original's, character for character: the sky
+        /// drifts by at most 56 pixels across the level horizontally and 28 vertically.
         /// </summary>
         private static void DrawSky(MapFile map, int wX, int wY, int viewX, int viewY)
         {
@@ -106,10 +115,12 @@ namespace DPTDOOM2D.Editor
 
             if (image == null) return;
 
-            int x = viewX + 127 - (wX - ViewHalfW) * 56 / SkyRangeX;
-            int y = viewY + 122 - (wY - ViewHalfH) * 28 / SkyRangeY;
+            int x = viewX - (wX - ViewHalfW) * 56 / SkyRangeX;
+            int y = viewY - (wY - ViewHalfH) * 28 / SkyRangeY;
 
-            Vga.Pic(x, y, image);
+            // Vga.Pic subtracts the hot spot; add it back so the top-left stays where
+            // it was computed, whatever the picture's own offset happens to be.
+            Vga.Pic(x + image.SX, y + image.SY, image);
         }
 
         private static VgaImage Sky(MapFile map)
@@ -132,6 +143,12 @@ namespace DPTDOOM2D.Editor
         /// Not one 8x8 piece per cell: the original calls V_pic with the whole
         /// 16x16 texture, so neighbouring cells overlap and a wall reads as one
         /// continuous surface instead of a grid of tiles.
+        ///
+        /// A cell whose wall is `_WATER_n` is not a picture at all — it is a request to
+        /// darken whatever is already there, which is how the game animates water with
+        /// a palette remap instead of a sprite. The original does the same in
+        /// Z_drawfld's `@@water` branch: `clrmap + (value+7)*256` over the cell. Skipping
+        /// those cells leaves the sky showing through a river.
         /// </summary>
         private static void DrawField(MapFile map, byte[] field, int wX, int wY,
             int originX, int originY, int viewW, int viewH)
@@ -151,11 +168,74 @@ namespace DPTDOOM2D.Editor
 
                     if (sx > originX + viewW || sx + CellSize < originX - CellSize) continue;
 
+                    int water = WaterRow(map, index);
+
+                    if (water >= 0)
+                    {
+                        RemapCell(sx, sy, water);
+                        continue;
+                    }
+
                     VgaImage image = Texture(map, index);
 
                     if (image != null) Vga.Pic(sx, sy, image);
                 }
             }
+        }
+
+        /// <summary>
+        /// The clrmap row a `_WATER_n` wall asks for, or -1 for an ordinary wall.
+        ///
+        /// The original stores the water level in the wall slot as a small integer
+        /// (`walp[i] = n[7]-'0'+1`) and then adds 7 to index clrmap, so "_WATER_0"
+        /// selects row 8. The table has twelve rows; anything past the end would read
+        /// past the array in C, so it is clamped here.
+        /// </summary>
+        private static int WaterRow(MapFile map, int index)
+        {
+            string name = map.WallName[index];
+
+            if (string.IsNullOrEmpty(name)) return -1;
+            if (!name.StartsWith("_WATER_", StringComparison.OrdinalIgnoreCase)) return -1;
+
+            int level = name.Length > 7 ? name[7] - '0' : 0;
+            if (level < 0 || level > 9) level = 0;
+
+            int row = level + 8;
+
+            return row < 12 ? row : 11;
+        }
+
+        private static readonly byte[][] ClrMapRows = BuildClrMapRows();
+
+        /// <summary>
+        /// The twelve clrmap rows, copied out once.
+        ///
+        /// Vga.MapPixel takes a 256-byte table rather than a row index, and the
+        /// palette keeps all twelve rows in one array — so the rows are sliced here
+        /// instead of on every pixel of every water cell.
+        /// </summary>
+        private static byte[][] BuildClrMapRows()
+        {
+            var rows = new byte[12][];
+
+            for (int i = 0; i < 12; ++i)
+            {
+                rows[i] = new byte[256];
+                Array.Copy(Palette.ClrMap, i * 256, rows[i], 0, 256);
+            }
+
+            return rows;
+        }
+
+        /// <summary>V_remap_rect over one cell: the water shading pass.</summary>
+        private static void RemapCell(int x, int y, int row)
+        {
+            byte[] cmap = ClrMapRows[row];
+
+            for (int py = y; py < y + CellSize; ++py)
+                for (int px = x; px < x + CellSize; ++px)
+                    Vga.MapPixel(px, py, cmap);
         }
 
         /// <summary>tctab, the type layer's colours, shared by the view and the minimap.</summary>

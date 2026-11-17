@@ -1118,11 +1118,18 @@ namespace DPTDOOM2D.Editor
 
         // ---- view ---------------------------------------------------------
 
-        /// <summary>Centres the view on a map pixel, in the original's coordinates.</summary>
+        /// <summary>
+        /// Puts a map pixel at the centre of the view.
+        ///
+        /// The camera *is* the centre (w_x/w_y), so this is a straight assignment.
+        /// Adding half the view here — which the first version did — made the point
+        /// land at the top-left corner instead, and every jump on the minimap felt
+        /// like it went to the wrong place.
+        /// </summary>
         public void CenterOn(int mapX, int mapY)
         {
-            CamX = mapX + 100;
-            CamY = mapY + 49;
+            CamX = mapX;
+            CamY = mapY;
             ClampCamera();
         }
 

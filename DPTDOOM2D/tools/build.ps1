@@ -202,6 +202,13 @@ try
 			Write-Host '  freedoom converter skipped (no refs/D2D_Also/DOOM/DOOM2.WAD)' -ForegroundColor DarkGray
 		}
 
+		# -data picks the data set, and every name has to resolve to a file: a config
+		# that says freedoom2d must boot on it, not silently fall back to doom2d.
+		& $exe -data doom2d --simulate 10 $env:TEMP\setcheck.bmp 1 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  data set selection FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  data set selection ok' -ForegroundColor DarkGray }
+		Remove-Item $env:TEMP\setcheck.bmp -ErrorAction SilentlyContinue
+
 		# Map writer: every map in the game and in the 166 custom packs has to survive
 		# a read-write-read round trip byte for byte. The editor cannot save a map
 		# until this passes, because a writer that is "almost right" corrupts levels.

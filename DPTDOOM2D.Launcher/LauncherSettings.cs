@@ -30,6 +30,13 @@ namespace DPTDOOM2D.Launcher
         public int Map = 1;
         public string MapPack = "";
 
+        /// <summary>
+        /// Which data set to boot on: "" for the one the game defaults to, or a file
+        /// name like "freedoom2d.wad". The three sets are interchangeable, so this is
+        /// one argument, not a mode.
+        /// </summary>
+        public string DataSet = "";
+
         public int Scale = 2;
         public string Stretch = "near";
         public bool Fullscreen;
@@ -94,6 +101,7 @@ namespace DPTDOOM2D.Launcher
                         case "game": settings.GamePath = value; break;
                         case "map": settings.Map = ParseInt(value, 1); break;
                         case "map_pack": settings.MapPack = value; break;
+                    case "data_set": settings.DataSet = value; break;
                         case "scale": settings.Scale = ParseInt(value, 2); break;
                         case "stretch": settings.Stretch = value; break;
                         case "fullscreen": settings.Fullscreen = ParseBool(value); break;
@@ -131,6 +139,7 @@ namespace DPTDOOM2D.Launcher
                 text.AppendLine("game=" + GamePath);
                 text.AppendLine("map=" + Map);
                 text.AppendLine("map_pack=" + MapPack);
+            text.AppendLine("data_set=" + DataSet);
                 text.AppendLine("scale=" + Scale);
                 text.AppendLine("stretch=" + Stretch);
                 text.AppendLine("fullscreen=" + (Fullscreen ? "on" : "off"));
@@ -179,7 +188,8 @@ namespace DPTDOOM2D.Launcher
                 Address,
                 PlayerName,
                 string.Join("|", Mods.ToArray()),
-                Layout
+                Layout,
+                DataSet
             });
         }
 
@@ -212,6 +222,7 @@ namespace DPTDOOM2D.Launcher
             }
 
             if (parts.Length > 14) Layout = parts[14];
+            if (parts.Length > 15 && parts[15].Length > 0) DataSet = parts[15];
         }
 
         // ---- command line ----------------------------------------------------
@@ -222,6 +233,11 @@ namespace DPTDOOM2D.Launcher
             var builder = new StringBuilder();
 
             builder.Append("-scale ").Append(Scale).Append(' ');
+
+            // The data set comes before everything else: it decides what the game
+            // boots on, and a -file on top of it is a mod, not a replacement.
+            if (!string.IsNullOrEmpty(DataSet))
+                builder.Append("-data ").Append(Quote(DataSet)).Append(' ');
 
             if (!string.IsNullOrEmpty(Stretch)) builder.Append("-stretch ").Append(Stretch).Append(' ');
             if (Fullscreen) builder.Append("-fullscr ");

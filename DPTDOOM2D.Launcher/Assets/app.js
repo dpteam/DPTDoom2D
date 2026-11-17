@@ -30,10 +30,12 @@
         relaySession: '',
         address: '127.0.0.1',
         layout: '',
-        name: 'Player'
+        name: 'Player',
+        dataSet: ''
     };
 
     var packs = [];
+    var dataSets = [];
     var levels = 19;
     var mods = [];
     var enabledMods = [];
@@ -68,7 +70,7 @@
             state.mode, state.game, state.map, state.mapPack, state.scale,
             state.stretch, state.fullscreen, state.port, state.password,
             state.master, state.relaySession, state.address, state.name,
-            enabledMods.join('|'), state.layout
+            enabledMods.join('|'), state.layout, state.dataSet
         ].join('\n');
     }
 
@@ -91,6 +93,7 @@
         if (parts.length > 12) { state.name = parts[12]; }
         if (parts.length > 13 && parts[13]) { enabledMods = parts[13].split('|'); }
         if (parts.length > 14) { state.layout = parts[14]; }
+        if (parts.length > 15) { state.dataSet = parts[15]; }
     }
 
     function applyState() {
@@ -109,6 +112,12 @@
         $('layout').value = state.layout;
 
         setMode(state.mode);
+
+        // The data-set list has to be filled before setMode runs: setMode posts a
+        // preview, which reads the form back, and an empty select would overwrite the
+        // saved choice with "". That is why the launcher kept showing DOOM2D after
+        // FREEDOOM2D had been picked.
+        renderDataSets();
         renderMapPack();
         renderLevels();
     }
@@ -127,6 +136,10 @@
         state.layout = $('layout').value;
         state.map = $('map').value;
         state.mapPack = $('mapPack').value;
+
+        // Only take the data set when the list is filled: an empty select reports ""
+        // and would throw away the saved choice.
+        if ($('dataSet').options.length > 0) { state.dataSet = $('dataSet').value; }
     }
 
     function changed() {
@@ -163,6 +176,38 @@
     }
 
     // ---------------------------------------------------------------- levels
+
+    // Fills the data-set list with the ones that are actually installed.
+    //
+    // A set that is not on disk is not offered: the choice decides which file the
+    // game boots on, and an entry that fails at startup is worse than no entry.
+    function renderDataSets() {
+        // Nothing known yet — the host sends the list with the game description.
+        // Leaving the select alone is better than replacing it with a placeholder
+        // and then with the real list a frame later.
+        if (dataSets.length === 0) { return; }
+
+        var select = $('dataSet');
+        select.options.length = 0;
+
+        for (var i = 0; i < dataSets.length; ++i) {
+            var option = document.createElement('option');
+            option.value = dataSets[i][0];
+            option.text = dataSets[i][1];
+            select.add(option, null);
+        }
+
+        // Keep the saved choice when it is still installed, otherwise take the first.
+        var want = state.dataSet || dataSets[0][0];
+        var found = false;
+
+        for (i = 0; i < dataSets.length; ++i) {
+            if (dataSets[i][0] === want) { found = true; break; }
+        }
+
+        select.value = found ? want : dataSets[0][0];
+        state.dataSet = select.value;
+    }
 
     function renderMapPack() {
         var select = $('mapPack');
@@ -463,6 +508,7 @@
             state.mapPack = $('mapPack').value;
             post('pack', state.mapPack);
         };
+        $('dataSet').onchange = changed;
 
         var inputs = ['executable', 'playerName', 'port', 'password', 'masterInline',
                       'relaySessionInline', 'address', 'scale', 'stretch', 'layout'];
@@ -579,7 +625,18 @@
                 }
             }
 
+            dataSets = [];
+            if (fields[5]) {
+                var sets = fields[5].split('\t');
+                for (i = 0; i < sets.length; ++i) {
+                    if (!sets[i]) { continue; }
+                    var row = sets[i].split('=');
+                    dataSets.push([row[0], row[1] || row[0]]);
+                }
+            }
+
             renderMapPack();
+            renderDataSets();
             renderLevels();
             renderMods();
             return;

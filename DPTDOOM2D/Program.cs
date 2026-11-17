@@ -359,9 +359,15 @@ namespace DPTDOOM2D
         static void Boot()
         {
             Wad.Startup();
-            string wad = Path.Combine(DataDirectory, "doom2d.wad");
+
+            string wad = DataFiles.MainWadPath(DataDirectory, Config.MainWad);
+
             if (!File.Exists(wad))
-                throw new Fatal("Не найден doom2d.wad (искал в " + DataDirectory + ")");
+            {
+                throw new Fatal("Не найден " + Path.GetFileName(wad) + " (искал в " + DataDirectory + ")\n"
+                    + "Наборы данных: " + DataFiles.DescribeSets(DataDirectory));
+            }
+
             Wad.AddWad(wad);
 
             // The manifest is what a peer has to agree on before a session starts,

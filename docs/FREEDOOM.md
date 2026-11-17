@@ -17,6 +17,11 @@ dptdoom2d.exe --freedoom freedoom2.wad Data\freedoom2d.wad
 Второй аргумент — любой WAD формата Doom (`IWAD`/`PWAD`): FreeDoom 1, FreeDoom 2,
 Phase 1, Phase 2, или, для проверки конвертера, обычный `DOOM2.WAD`.
 
+Готовый набор кладётся в `Data` рядом с игрой и выбирается в лаунчере в поле
+**Набор данных** (или `-data freedoom2d` / `main_wad=freedoom2d.wad` в конфиге).
+Все три набора взаимозаменяемы: одинаковые имена лампов и форматы, различается
+только файл.
+
 Проверка в `build.ps1`:
 
 ```powershell
