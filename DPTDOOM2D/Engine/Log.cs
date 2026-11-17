@@ -42,7 +42,7 @@ namespace DPTDOOM2D.Engine
                 System.IO.Directory.CreateDirectory(Directory);
 
                 FilePath = Path.Combine(Directory,
-                    "log_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss") + ".log");
+                    "log_" + DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff") + ".log");
 
                 // Clear first: DefaultTraceListener writes to the debugger and
                 // would otherwise duplicate everything in a debugger session.
