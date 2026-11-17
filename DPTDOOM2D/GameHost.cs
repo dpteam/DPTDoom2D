@@ -37,7 +37,13 @@ namespace DPTDOOM2D
             Vga.Init(Vga.SCRW, Vga.SCRH);
 
             Wad.Startup();
-            Wad.AddWad(Path.Combine(Program.DataDirectory, "doom2d.wad"));
+            string wad = Path.Combine(Program.DataDirectory, "doom2d.wad");
+            Wad.AddWad(wad);
+
+            // What the session has to agree on: the WAD, every -file in order, the
+            // map pack, and the actor tables (see DataManifest).
+            DataManifest.AddFile(wad);
+
             Program.AddExtraWads();
             Wad.InitWads();
 

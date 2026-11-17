@@ -99,4 +99,66 @@ if ($desync)
 }
 
 Write-Host '== session ran without desync' -ForegroundColor Green
+
+# ---------------------------------------------------------------- different data
+#
+# The other half of the contract: when the data does NOT match, the session must
+# be refused before the first tick, and the refusal has to name the file. A guest
+# with a mod the host does not have is the everyday case.
+
+foreach ($candidate in $Port..($Port + 40))
+{
+    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
+    {
+        $Port = $candidate
+        break
+    }
+}
+
+$modSrc = Join-Path $Out 'mismatch'
+Remove-Item $modSrc -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $modSrc -Force | Out-Null
+Set-Content (Join-Path $modSrc 'actors.txt') 'actor Imp { health 40 }' -Encoding ASCII
+
+$modPk3 = Join-Path $Out 'mismatch.pk3'
+Remove-Item $modPk3 -Force -ErrorAction SilentlyContinue
+& $exe --modbuild $modPk3 $modSrc 2>&1 | Out-Null
+if (-not (Test-Path $modPk3)) { Write-Host '== could not build the mismatch mod' -ForegroundColor Red; exit 1 }
+
+Write-Host '== different data on purpose' -ForegroundColor Cyan
+$hostLog = Join-Path $Out 'mismatch-host.log'
+$guestLog = Join-Path $Out 'mismatch-guest.log'
+
+$hostProcess = Start-Process -FilePath $exe `
+    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-file', $modPk3 `
+    -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
+
+Start-Sleep -Seconds 2
+
+$guestProcess = Start-Process -FilePath $exe `
+    -ArgumentList '-net', 'join', '-address', '127.0.0.1', '-port', $Port, '-scale', '1' `
+    -PassThru -RedirectStandardOutput $guestLog -RedirectStandardError "$guestLog.err"
+
+Start-Sleep -Seconds 3
+
+foreach ($p in $hostProcess, $guestProcess) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+Start-Sleep -Milliseconds 300
+
+$hostText = if (Test-Path $hostLog) { Get-Content $hostLog -Raw } else { '' }
+$guestText = if (Test-Path $guestLog) { Get-Content $guestLog -Raw } else { '' }
+
+if ($hostText -match 'different game data' -and $guestText -match 'mismatch\.pk3')
+{
+    Write-Host '== mismatched data refused, and the file was named' -ForegroundColor Green
+}
+else
+{
+    Write-Host '== mismatch was NOT refused' -ForegroundColor Red
+    Write-Host '--- host ---'; $hostText -split "?
+" | Where-Object { $_ -match 'net:|data:' } | Select-Object -Last 5
+    Write-Host '--- guest ---'; $guestText -split "?
+" | Where-Object { $_ -match 'net:|data:' } | Select-Object -Last 5
+    exit 1
+}
+
 exit 0

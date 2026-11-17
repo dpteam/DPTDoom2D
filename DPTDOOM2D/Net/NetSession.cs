@@ -72,6 +72,29 @@ namespace DPTDOOM2D.Net
 
         private int desyncTick = -1;
 
+        /// <summary>This machine's data manifest, built once at startup.</summary>
+        private List<Engine.DataManifest.Entry> manifest;
+
+        /// <summary>What the peer reported, kept so a refusal can name the files.</summary>
+        private List<Engine.DataManifest.Entry> remoteManifest;
+
+        /// <summary>
+        /// Hashes this installation's WAD, mods and actor tables. Called before the
+        /// handshake so a mismatch is found before the first tick, not after the
+        /// first desync.
+        /// </summary>
+        public void PrepareManifest()
+        {
+            if (manifest != null) return;
+
+            manifest = Engine.DataManifest.Build();
+            Log.Info("data: " + Engine.DataManifest.Describe(manifest));
+
+            // The tick checksum mixes this in, so a data change mid-session is
+            // visible immediately rather than as a drift minutes later.
+            NetProtocol.ManifestDigest = Engine.DataManifest.Digest(manifest);
+        }
+
         // ---- accessors -------------------------------------------------------
 
         public bool Active { get { return role != Role.None && failure == null; } }
@@ -199,9 +222,39 @@ namespace DPTDOOM2D.Net
                 return false;
             }
 
+            // The guest's data has to match before anything is simulated. The
+            // manifest follows the fixed 34-byte part of Hello.
+            if (payload.Length > 34)
+            {
+                remoteManifest = Engine.DataManifest.Decode(payload, 34);
+
+                PrepareManifest();
+                string difference = Engine.DataManifest.Compare(manifest, remoteManifest);
+
+                if (difference.Length != 0)
+                {
+                    Log.Warn("net: data differs from the guest's: " + difference);
+                    SendRefuse(NetProtocol.RefuseData, difference);
+                    failure = "the guest has different game data: " + difference;
+                    return false;
+                }
+            }
+            else
+            {
+                // No manifest means a build from before protocol 2, which cannot
+                // have got this far, or a hand-written client. Refuse rather than
+                // gamble on a session that will desync.
+                SendRefuse(NetProtocol.RefuseData, "no data manifest");
+                failure = "the guest did not send a data manifest";
+                return false;
+            }
+
             seed = Rng.NewSeed();
 
-            var welcome = new byte[2 + 1 + 4 + 1 + 1 + 1 + 8];
+            // The host sends its own manifest back, so the guest can also say what
+            // differed instead of only "refused".
+            byte[] hostManifest = Engine.DataManifest.Encode(manifest);
+            var welcome = new byte[10 + 8 + hostManifest.Length];
             NetProtocol.PutU16(welcome, 0, NetProtocol.Version);
             welcome[2] = (byte)remotePlayer;
             NetProtocol.PutU32(welcome, 3, seed);
@@ -209,6 +262,7 @@ namespace DPTDOOM2D.Net
             welcome[8] = (byte)(deathmatch ? 1 : 0);
             welcome[9] = (byte)InputDelay;
             NetProtocol.PutText(welcome, 10, 8, "DPT2D");
+            Buffer.BlockCopy(hostManifest, 0, welcome, 18, hostManifest.Length);
 
             Send(NetProtocol.Welcome, welcome);
 
@@ -256,9 +310,13 @@ namespace DPTDOOM2D.Net
 
             lastReceiveMs = Environment.TickCount;
 
-            var hello = new byte[2 + 32];
+            PrepareManifest();
+            byte[] manifestPayload = Engine.DataManifest.Encode(manifest);
+
+            var hello = new byte[2 + 32 + manifestPayload.Length];
             NetProtocol.PutU16(hello, 0, NetProtocol.Version);
             NetProtocol.PutText(hello, 2, 32, password ?? "");
+            Buffer.BlockCopy(manifestPayload, 0, hello, 34, manifestPayload.Length);
 
             Send(NetProtocol.Hello, hello);
 
@@ -280,7 +338,14 @@ namespace DPTDOOM2D.Net
             if (type == NetProtocol.Refuse)
             {
                 byte code = payload.Length > 0 ? payload[0] : (byte)0;
+                string detail = payload.Length > 1
+                    ? System.Text.Encoding.UTF8.GetString(payload, 1, payload.Length - 1)
+                    : null;
+
                 failure = NetProtocol.DescribeRefusal(code);
+                if (!string.IsNullOrEmpty(detail)) failure += ": " + detail;
+
+                Log.Warn("net: refused by the host: " + failure);
                 return false;
             }
 
@@ -302,6 +367,23 @@ namespace DPTDOOM2D.Net
             startMap = payload[7];
             deathmatch = payload[8] != 0;
 
+            // The host's manifest comes back in Welcome; comparing it here as well
+            // means the guest can name the difference even if the refusal text was
+            // truncated by the frame size.
+            if (payload.Length > 18)
+            {
+                remoteManifest = Engine.DataManifest.Decode(payload, 18);
+
+                PrepareManifest();
+                string difference = Engine.DataManifest.Compare(manifest, remoteManifest);
+                if (difference.Length != 0)
+                {
+                    failure = "different game data: " + difference;
+                    Log.Warn("net: " + failure);
+                    return false;
+                }
+            }
+
             BeginReading();
             if (progress != null) progress("connected");
 
@@ -311,6 +393,27 @@ namespace DPTDOOM2D.Net
         private void SendRefuse(byte code)
         {
             Send(NetProtocol.Refuse, new byte[] { code });
+        }
+
+        /// <summary>Refusal with an explanation, so the guest learns which file differs.</summary>
+        private void SendRefuse(byte code, string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                SendRefuse(code);
+                return;
+            }
+
+            if (text.Length > 400) text = text.Substring(0, 400);
+
+            // UTF-8, not ASCII: a mod named in Cyrillic has to survive the trip.
+            byte[] body = System.Text.Encoding.UTF8.GetBytes(text);
+            if (body.Length > 1000) body = System.Text.Encoding.UTF8.GetBytes(text.Substring(0, 200));
+
+            byte[] payload = new byte[1 + body.Length];
+            payload[0] = code;
+            Buffer.BlockCopy(body, 0, payload, 1, body.Length);
+            Send(NetProtocol.Refuse, payload);
         }
 
         // ---- stream plumbing -------------------------------------------------

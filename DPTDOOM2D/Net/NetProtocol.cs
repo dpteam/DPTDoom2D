@@ -29,8 +29,11 @@ namespace DPTDOOM2D.Net
         public const byte Magic1 = (byte)'2';
 
         /// <summary>Bumped whenever the game's simulation changes in a way that
-        /// would desync against an older build.</summary>
-        public const int Version = 1;
+        /// would desync against an older build.
+        ///
+        /// 2: the handshake carries a data manifest (WAD, mods, actor tables), so
+        /// two machines refuse to start on different data instead of desyncing.</summary>
+        public const int Version = 2;
 
         public const int MaxFrameSize = 4096;
 
@@ -181,6 +184,10 @@ namespace DPTDOOM2D.Net
             hash = Mix(hash, (uint)Game.Game.Map);
             hash = Mix(hash, (uint)Game.Game.Time);
 
+            // The data the world was built from: a WAD swapped mid-session shows
+            // up here on the next tick instead of as an unexplained drift.
+            hash = Mix(hash, ManifestDigest);
+
             hash = MixPlayer(hash, Game.Game.Pl1);
             if (Game.Game.TwoPl) hash = MixPlayer(hash, Game.Game.Pl2);
 
@@ -188,6 +195,12 @@ namespace DPTDOOM2D.Net
 
             return hash;
         }
+
+        /// <summary>
+        /// A digest of the loaded data, set once at startup. Kept here so the
+        /// per-tick checksum does not have to rebuild the manifest.
+        /// </summary>
+        public static uint ManifestDigest;
 
         private static uint MixPlayer(uint hash, Game.PlayerData p)
         {

@@ -164,6 +164,12 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  actors FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  actors ok' -ForegroundColor DarkGray }
 
+		# The manifest that decides whether two machines may play together: wire
+		# format, comparison, and the digest mixed into the tick checksum.
+		& $exe --datacheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  manifest FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  manifest ok' -ForegroundColor DarkGray }
+
 		# Mod kit: build a PK3 out of a map pack, list it, and load it back. This is
 		# the whole mod workflow in one round trip.
 		$modSrc = Join-Path $tmp 'modsrc'

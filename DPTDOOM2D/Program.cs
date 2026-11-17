@@ -100,6 +100,8 @@ namespace DPTDOOM2D
                     Boot();
                     return Headless.ActorCheck();
                 }
+                if (args[i] == "--datacheck")
+                    return Headless.ManifestCheck();
                 if (args[i] == "--modbuild" && i + 2 < args.Length)
                 {
                     var inputs = new string[args.Length - i - 2];
@@ -211,6 +213,10 @@ namespace DPTDOOM2D
                 throw new Fatal("Не найден doom2d.wad (искал в " + DataDirectory + ")");
             Wad.AddWad(wad);
 
+            // The manifest is what a peer has to agree on before a session starts,
+            // so every file that takes part in the load is recorded here.
+            DataManifest.AddFile(wad);
+
             // -file <wad> from the command line, exactly as in files.c.
             AddExtraWads();
 
@@ -252,6 +258,7 @@ namespace DPTDOOM2D
                 try
                 {
                     AddContainer(path);
+                    DataManifest.AddFile(path);
                 }
                 catch (Exception e)
                 {
@@ -271,6 +278,7 @@ namespace DPTDOOM2D
             try
             {
                 AddContainer(pack);
+                DataManifest.AddFile(pack);
                 Log.Info("map pack: " + Path.GetFileName(pack));
             }
             catch (Exception e)

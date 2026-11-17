@@ -93,6 +93,7 @@ dptdoom2d.exe --sounds
 dptdoom2d.exe --cheats
 dptdoom2d.exe --controls
 dptdoom2d.exe --actorcheck
+dptdoom2d.exe --datacheck
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
@@ -134,6 +135,10 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 `monster.c` и прогоняет парсер по намеренно битым файлам: каждый код ошибки из
 [ACTORS.md](ACTORS.md) должен сработать. Это проверка того, что «данные вместо
 кода» не разъехались с оригиналом.
+
+`--datacheck` проверяет манифест данных ([NETWORK.md](NETWORK.md)): круговой путь
+через провод и все три вида расхождения — отсутствующий файл, другой порядок,
+другое содержимое.
 
 `--modbuild` / `--modlist` / `--modunpack` — модкит: собрать PK3 из папки,
 посмотреть, что из него загрузится, распаковать обратно.

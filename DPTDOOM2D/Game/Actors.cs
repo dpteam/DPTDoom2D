@@ -93,6 +93,52 @@ namespace DPTDOOM2D.Engine
         /// <summary>True when the actor is meant to be invisible: sprite "none", "NULL", "----" or "TNT1".</summary>
         public static readonly bool[] Hidden = new bool[TypeCount];
 
+        /// <summary>
+        /// A digest of the compiled tables, for the network manifest: two machines
+        /// that disagree about any size, sprite, sound or frame sequence would
+        /// desync, and this is the one number that covers all of them.
+        /// </summary>
+        public static uint Digest()
+        {
+            Load();
+
+            uint hash = 2166136261u;
+
+            for (int i = 0; i < TypeCount; ++i)
+            {
+                Size size = Sizes[i + 1];
+                hash = Net.NetProtocol.Mix(hash, (uint)size.R);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.H);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.L);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.Mp);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.Rv);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.Jv);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.Sp);
+                hash = Net.NetProtocol.Mix(hash, (uint)size.MinP);
+
+                hash = MixText(hash, Sprite[i]);
+                hash = Net.NetProtocol.Mix(hash, (uint)Frames[i]);
+                hash = Net.NetProtocol.Mix(hash, (uint)Style[i]);
+                hash = Net.NetProtocol.Mix(hash, (uint)Translation[i]);
+
+                for (int s = 0; s < SoundCount; ++s) hash = MixText(hash, Sound[i][s]);
+                for (int l = 0; l < LabelCount; ++l) hash = MixText(hash, Anim[i][l]);
+            }
+
+            return hash;
+        }
+
+        static uint MixText(uint hash, string text)
+        {
+            if (text == null) return Net.NetProtocol.Mix(hash, 0);
+
+            hash = Net.NetProtocol.Mix(hash, (uint)text.Length);
+            for (int i = 0; i < text.Length; ++i)
+                hash = Net.NetProtocol.Mix(hash, text[i]);
+
+            return hash;
+        }
+
         /// <summary>Parse problems, already formatted as file:line: code: message.</summary>
         public static readonly List<string> Errors = new List<string>();
 
