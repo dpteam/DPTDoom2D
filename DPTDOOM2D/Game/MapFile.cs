@@ -504,8 +504,21 @@ namespace DPTDOOM2D.Game
         /// <summary>An empty map with a floor and a border, the way a new level starts.</summary>
         public static MapFile CreateEmpty()
         {
+            return CreateEmpty("SQR01_1");
+        }
+
+        /// <summary>
+        /// The same, with the wall the caller knows exists in the WAD it loaded.
+        ///
+        /// A border of wall index 1 needs <paramref name="wallName"/> to resolve, or
+        /// the game dies on F_getresid the first time it loads the map. The editor
+        /// passes a wall it took from a real level; the parameterless form is for
+        /// tests and for the stock WAD.
+        /// </summary>
+        public static MapFile CreateEmpty(string wallName)
+        {
             var map = new MapFile();
-            map.WallName[1] = "WALL01_1";
+            map.WallName[1] = wallName ?? "";
             map.WallType[1] = 0;
 
             // A one-cell stone border so the player cannot walk off the map.

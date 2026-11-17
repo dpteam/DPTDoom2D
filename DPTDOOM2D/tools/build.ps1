@@ -206,6 +206,22 @@ try
 				if ($LASTEXITCODE -ne 0) { Write-Host '  editor map does not load' -ForegroundColor Red; $failed++ }
 				else { Write-Host '  editor save ok' -ForegroundColor DarkGray }
 			}
+
+			# Undo has to restore the map byte for byte, and a brand new map has to be
+			# playable — those are the two things a mapper does most.
+			& $editorExe --undocheck 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  editor undo FAILED' -ForegroundColor Red; $failed++ }
+
+			$newMap = Join-Path $tmp 'new-map.wad'
+			Remove-Item $newMap -Force -ErrorAction SilentlyContinue
+			& $editorExe --newmap $newMap 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  editor new map FAILED' -ForegroundColor Red; $failed++ }
+			else
+			{
+				& $exe -file $newMap --simulate 60 (Join-Path $tmp 'new-map.bmp') 1 2>&1 | Out-Null
+				if ($LASTEXITCODE -ne 0) { Write-Host '  a new map does not play' -ForegroundColor Red; $failed++ }
+				else { Write-Host '  editor undo and new map ok' -ForegroundColor DarkGray }
+			}
 		}
 		else
 		{

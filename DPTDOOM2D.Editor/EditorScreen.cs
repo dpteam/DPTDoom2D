@@ -95,6 +95,12 @@ namespace DPTDOOM2D.Editor
         private int dragCamX, dragCamY;
         private bool panning;
 
+        /// <summary>Undo steps: one per stroke, not per cell.</summary>
+        private readonly UndoStack undo = new UndoStack();
+
+        /// <summary>True once the current stroke has pushed its snapshot.</summary>
+        private bool strokeRecorded;
+
         /// <summary>Cell under the mouse, for the status line.</summary>
         private int hoverX = -1, hoverY = -1;
 
@@ -133,6 +139,8 @@ namespace DPTDOOM2D.Editor
             Changed = false;
             Help = false;
             PaletteScroll = 0;
+            undo.Clear();
+            strokeRecorded = false;
 
             MapCanvas.Forget();
             BuildWalls();
@@ -270,6 +278,14 @@ namespace DPTDOOM2D.Editor
                         if ((window.Modifiers & Vk.CtrlMask) != 0) AskOpen();
                         break;
 
+                    case Vk.Z:
+                        if ((window.Modifiers & Vk.CtrlMask) != 0) Undo();
+                        break;
+
+                    case Vk.N:
+                        if ((window.Modifiers & Vk.CtrlMask) != 0) NewMap();
+                        break;
+
                     case Vk.F5: Playtest(); break;
                 }
             }
@@ -292,6 +308,7 @@ namespace DPTDOOM2D.Editor
                 dragMouseY = my;
                 dragCamX = CamX;
                 dragCamY = CamY;
+                strokeRecorded = false;
 
                 // Middle button, or right with the left one held, pans the map.
                 panning = (buttons & 4) != 0;
@@ -301,6 +318,7 @@ namespace DPTDOOM2D.Editor
             {
                 dragButton = 0;
                 panning = false;
+                strokeRecorded = false;
             }
             else if (dragButton != 0)
             {
@@ -359,6 +377,14 @@ namespace DPTDOOM2D.Editor
             if (!InView(mx, my)) return;
 
             bool erase = (buttons & 2) != 0;
+
+            // One undo step per stroke, pushed before the first cell changes: a
+            // brush dragged across the map must come back in one Ctrl+Z, not forty.
+            if (!strokeRecorded)
+            {
+                undo.Push(Map);
+                strokeRecorded = true;
+            }
 
             if (Tool == EditorTool.Things)
             {
@@ -498,6 +524,74 @@ namespace DPTDOOM2D.Editor
         }
 
         // ------------------------------------------------------------------ save
+
+        /// <summary>Ctrl+Z: puts the map back to before the last stroke.</summary>
+        private void Undo()
+        {
+            if (!undo.Undo(Map))
+            {
+                Status = "отменять нечего";
+                return;
+            }
+
+            // The snapshot may have brought back walls this map did not have when the
+            // palette was built, so the list is rebuilt rather than trusted.
+            BuildWalls();
+            ClampPalette();
+
+            Changed = true;
+            Status = "отменено (осталось " + undo.Count + ")";
+        }
+
+        /// <summary>Ctrl+N: an empty map with a floor border and a start point.</summary>
+        private void NewMap()
+        {
+            if (Changed)
+            {
+                AskSave();
+                return;
+            }
+
+            MapFile empty = MapFile.CreateEmpty(PickWallForNewMap());
+            Load(empty, "MAP01", "");
+            Changed = true;
+            Status = "новая карта: пол с рамкой и точка старта";
+        }
+
+        /// <summary>
+        /// A wall name that exists in this WAD, taken from a real level.
+        ///
+        /// The new map's border is wall index 1, and a name that does not resolve is
+        /// a fatal error the first time the game loads the level — so the name is
+        /// copied from a level that already works rather than guessed.
+        /// </summary>
+        public static string PickWallForNewMap()
+        {
+            int res = Wad.FindRes("MAP01");
+
+            if (res >= 0)
+            {
+                try
+                {
+                    MapFile sample = MapFile.Read(Wad.LoadRes(res), "MAP01");
+
+                    for (int i = 1; i < 256; ++i)
+                    {
+                        string name = sample.WallName[i];
+                        if (string.IsNullOrEmpty(name)) continue;
+                        if (Wad.FindRes(name) < 0) continue;
+
+                        return name;
+                    }
+                }
+                catch
+                {
+                    // A broken MAP01 must not stop a new map from being created.
+                }
+            }
+
+            return "SQR01_1";
+        }
 
         private void AskSave()
         {
@@ -840,6 +934,7 @@ namespace DPTDOOM2D.Editor
             "",
             "1-4  инструмент: задний / передний / типы / объекты",
             "B F T — показать слои,  стрелки — камера",
+            "Ctrl+Z отменить,  Ctrl+N новая карта",
             "Ctrl+S сохранить,  Ctrl+O открыть",
             "F5 — запустить игру на этой карте",
             "Esc — выход",
@@ -921,7 +1016,7 @@ namespace DPTDOOM2D.Editor
 
         public const int D1 = 0x31, D2 = 0x32, D3 = 0x33, D4 = 0x34;
         public const int B = 0x42, F = 0x46, T = 0x54;
-        public const int O = 0x4F, S = 0x53;
+        public const int N = 0x4E, O = 0x4F, S = 0x53, Z = 0x5A;
 
         public const int F1 = 0x70, F5 = 0x74;
 

@@ -42,6 +42,14 @@ namespace DPTDOOM2D.Editor
                 if (args.Length >= 3 && args[0] == "--save")
                     return SaveToFile(args[1], args[2]);
 
+                // --newmap <out.wad>: the empty map a mapper starts from.
+                if (args.Length >= 2 && args[0] == "--newmap")
+                    return WriteNewMap(args[1]);
+
+                // --undocheck: undo has to restore the map exactly, not approximately.
+                if (args.Length >= 1 && args[0] == "--undocheck")
+                    return UndoCheck();
+
                 string open = args.Length > 0 ? args[0] : null;
                 return Run(open);
             }
@@ -212,6 +220,90 @@ namespace DPTDOOM2D.Editor
 
             string name = Path.GetFileNameWithoutExtension(open).ToUpperInvariant();
             return name.Length == 0 ? "MAP01" : name;
+        }
+
+        /// <summary>Writes the empty map a new level starts from, so the game can try it.</summary>
+        private static int WriteNewMap(string output)
+        {
+            MapFile map = MapFile.CreateEmpty(EditorScreen.PickWallForNewMap());
+
+            var lumps = new List<KeyValuePair<string, byte[]>>();
+            lumps.Add(new KeyValuePair<string, byte[]>("MAP01", map.Write()));
+
+            if (!Prototypes.WadBuilder.WriteLumps(output, lumps))
+            {
+                Console.Error.WriteLine("newmap: не удалось записать " + output);
+                return 1;
+            }
+
+            Console.WriteLine("newmap: " + Path.GetFileName(output) + " (" + map.Summary() + ")");
+            return 0;
+        }
+
+        /// <summary>
+        /// Undo has to put the map back exactly: the same bytes out, not "close enough".
+        ///
+        /// The stack is snapshots, so this also proves that a snapshot covers every
+        /// field the writer emits — a layer, a thing, a switch, the sky, the music.
+        /// A missed field would show up here as a different file.
+        /// </summary>
+        private static int UndoCheck()
+        {
+            int res = Wad.FindRes("MAP01");
+            if (res < 0)
+            {
+                Console.Error.WriteLine("undocheck: нет MAP01");
+                return 1;
+            }
+
+            MapFile map = MapFile.Read(Wad.LoadRes(res), "MAP01");
+            byte[] before = map.Write();
+
+            var undo = new UndoStack();
+            undo.Push(map);
+
+            // Change every kind of thing a stroke or a tool can touch.
+            for (int i = 0; i < map.Back.Length; i += 7) map.Back[i] = 3;
+            for (int i = 0; i < map.Type.Length; i += 11) map.Type[i] = 1;
+            for (int i = 0; i < map.Front.Length; i += 13) map.Front[i] = 2;
+
+            var thing = new MapThing();
+            thing.X = 100; thing.Y = 100; thing.Type = MapThingType.Demon;
+            map.Things.Add(thing);
+
+            if (map.Things.Count > 0) map.Things.RemoveAt(0);
+
+            var sw = new MapSwitch();
+            sw.X = 5; sw.Y = 5; sw.Type = 3;
+            map.Switches.Add(sw);
+
+            map.Sky = 3;
+            map.Music = "ZZZZZZZZ";
+
+            if (!undo.Undo(map))
+            {
+                Console.WriteLine("undocheck: undo reported nothing to undo");
+                return 1;
+            }
+
+            byte[] after = map.Write();
+
+            if (before.Length != after.Length)
+            {
+                Console.WriteLine("undocheck: size " + before.Length + " -> " + after.Length);
+                return 1;
+            }
+
+            for (int i = 0; i < before.Length; ++i)
+            {
+                if (before[i] == after[i]) continue;
+
+                Console.WriteLine("undocheck: differs at byte " + i);
+                return 1;
+            }
+
+            Console.WriteLine("undocheck: undo restored the map byte for byte (" + before.Length + " bytes)");
+            return 0;
         }
 
         /// <summary>Reads a map and writes it back through the editor's save path.</summary>
