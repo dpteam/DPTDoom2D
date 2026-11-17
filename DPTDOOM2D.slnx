@@ -3,4 +3,5 @@
   <Project Path="DPTDOOM2D.Shared/DPTDOOM2D.Shared.csproj" />
   <Project Path="DPTDOOM2D.Master/DPTDOOM2D.Master.csproj" />
   <Project Path="DPTDOOM2D.Launcher/DPTDOOM2D.Launcher.csproj" />
+  <Project Path="DPTDOOM2D.Editor/DPTDOOM2D.Editor.csproj" />
 </Solution>

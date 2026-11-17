@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0-windows</TargetFrameworks>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>dptdoom2d-editor</AssemblyName>
+    <RootNamespace>DPTDOOM2D.Editor</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyTitle>DPT.DOOM 2D map editor</AssemblyTitle>
+    <Product>DPT.DOOM 2D</Product>
+    <Company>DartPower Team</Company>
+    <Copyright>Copyright (C) DartPower Team.</Copyright>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>..\resources\dptdoom2d.ico</ApplicationIcon>
+    <!-- The framebuffer becomes a bitmap through a raw pointer: one lookup per
+         pixel, which is what makes redrawing the map feel instant. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net40'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    No WinForms: AGENTS.md allows it for the launcher only, and the original
+    editor was a VGA program with its own window anyway. This one runs on the
+    same Win32 layer as the game and draws into the same 320x200 framebuffer.
+
+    The engine sources are linked rather than referenced, so the editor ships as a
+    single exe and a map saved here is written by the exact code the game reads.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DPTDOOM2D\Engine\Wad.cs" Link="Engine\Wad.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Vga.cs" Link="Engine\Vga.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\VgaImage.cs" Link="Engine\VgaImage.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Palette.cs" Link="Engine\Palette.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Res.cs" Link="Engine\Res.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Bin.cs" Link="Engine\Bin.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Log.cs" Link="Engine\Log.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Glob.cs" Link="Engine\Glob.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\Rng.cs" Link="Engine\Rng.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\ActorDef.cs" Link="Engine\ActorDef.cs" />
+
+    <Compile Include="..\DPTDOOM2D\Win32\NativeMethods.cs" Link="Win32\NativeMethods.cs" />
+    <Compile Include="..\DPTDOOM2D\Win32\Win32Window.cs" Link="Win32\Win32Window.cs" />
+    <Compile Include="..\DPTDOOM2D\Win32\Presenter.cs" Link="Win32\Presenter.cs" />
+
+    <Compile Include="..\DPTDOOM2D\Game\MapFile.cs" Link="Game\MapFile.cs" />
+    <Compile Include="..\DPTDOOM2D\Game\Obj.cs" Link="Game\Obj.cs" />
+    <Compile Include="..\DPTDOOM2D\Game\Actors.cs" Link="Game\Actors.cs" />
+
+    <Compile Include="..\DPTDOOM2D\Prototypes\WadBuilder.cs" Link="Prototypes\WadBuilder.cs" />
+
+    <Compile Include="..\DPTDOOM2D.Shared\DataManifest.cs" Link="Shared\DataManifest.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterProtocol.cs" Link="Shared\MasterProtocol.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\DPTDOOM2D\Data\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\DPTDOOM2D\Data\default.cfg')" />
+    <None Include="..\refs\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\doom2d.wad')" />
+  </ItemGroup>
+
+</Project>

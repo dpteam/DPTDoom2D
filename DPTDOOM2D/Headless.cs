@@ -638,6 +638,174 @@ namespace DPTDOOM2D
             return entry;
         }
 
+        /// <summary>
+        /// --mapcheck: read every map, write it back, read the result and compare.
+        ///
+        /// The editor cannot exist without this. The game has only ever read the map
+        /// format; the writer is new, and a writer that produces a file the game reads
+        /// slightly differently would corrupt maps quietly. Every layer, wall name,
+        /// thing and switch has to survive the round trip byte for byte.
+        /// </summary>
+        public static int MapCheck()
+        {
+            int failed = 0;
+            int maps = 0;
+
+            // The built-in levels first.
+            for (int map = 1; map <= 19; ++map)
+            {
+                string name = string.Format("MAP{0:00}", map);
+                int res = Wad.FindRes(name);
+                if (res < 0) continue;
+
+                ++maps;
+                failed += RoundTrip(name, Wad.LoadRes(res));
+            }
+
+            // Then every map in every custom pack: those are the files a modder
+            // actually opens in the editor, and they use things the built-in levels
+            // do not (water walls, triggers, no single-player start).
+            string[] packs = Program.ListMapPacks();
+
+            for (int p = 0; p < packs.Length; ++p)
+            {
+                string pack = packs[p];
+
+                try
+                {
+                    byte[] data = File.ReadAllBytes(pack);
+                    var entries = new List<KeyValuePair<string, byte[]>>();
+
+                    // Only the map lumps matter here, and a WAD directory is easy to
+                    // walk: 12-byte header, then count and offset.
+                    if (data.Length < 12) continue;
+
+                    int count = BitConverter.ToInt32(data, 4);
+                    int directory = BitConverter.ToInt32(data, 8);
+                    if (count <= 0 || directory < 12 || directory + count * 16 > data.Length) continue;
+
+                    for (int i = 0; i < count; ++i)
+                    {
+                        int at = directory + i * 16;
+                        int offset = BitConverter.ToInt32(data, at);
+                        int length = BitConverter.ToInt32(data, at + 4);
+
+                        if (offset < 0 || length < 0 || offset + length > data.Length) continue;
+
+                        var lump = new byte[length];
+                        Buffer.BlockCopy(data, offset, lump, 0, length);
+                        entries.Add(new KeyValuePair<string, byte[]>(i.ToString(), lump));
+                    }
+
+                    for (int i = 0; i < entries.Count; ++i)
+                    {
+                        byte[] lump = entries[i].Value;
+                        if (!LooksLikeMap(lump)) continue;
+
+                        ++maps;
+                        failed += RoundTrip(Path.GetFileName(pack) + "#" + i, lump);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("  " + Path.GetFileName(pack) + ": " + Log.Describe(e));
+                    ++failed;
+                }
+            }
+
+            Console.WriteLine(failed == 0
+                ? "maps: " + maps + " round-tripped byte for byte"
+                : "maps: " + failed + " of " + maps + " failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        private static bool LooksLikeMap(byte[] data)
+        {
+            if (data == null || data.Length < 10) return false;
+            if (data[6] != 0x1A) return false;
+
+            string id = Encoding.GetEncoding(28591).GetString(data, 0, 6);
+            return id == "Doom2D";
+        }
+
+        /// <summary>Reads a map, writes it, reads it back, and compares every field.</summary>
+        private static int RoundTrip(string name, byte[] original)
+        {
+            try
+            {
+                MapFile first = MapFile.Read(original, name);
+                byte[] written = first.Write();
+                MapFile second = MapFile.Read(written, name + " (saved)");
+
+                string difference = Diff(first, second);
+                if (difference.Length == 0) return 0;
+
+                Console.WriteLine("  " + name + ": " + difference);
+                return 1;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("  " + name + ": " + Log.Describe(e));
+                return 1;
+            }
+        }
+
+        /// <summary>Everything that has to match, compared field by field.</summary>
+        private static string Diff(MapFile a, MapFile b)
+        {
+            if (a.Sky != b.Sky) return "sky " + a.Sky + " vs " + b.Sky;
+            if (a.Music != b.Music) return "music '" + a.Music + "' vs '" + b.Music + "'";
+
+            for (int i = 1; i < 256; ++i)
+            {
+                if (a.WallName[i] != b.WallName[i])
+                    return "wall " + i + " name '" + a.WallName[i] + "' vs '" + b.WallName[i] + "'";
+                if (a.WallType[i] != b.WallType[i])
+                    return "wall " + i + " type " + a.WallType[i] + " vs " + b.WallType[i];
+            }
+
+            string layer = DiffLayer("back", a.Back, b.Back);
+            if (layer.Length != 0) return layer;
+
+            layer = DiffLayer("type", a.Type, b.Type);
+            if (layer.Length != 0) return layer;
+
+            layer = DiffLayer("front", a.Front, b.Front);
+            if (layer.Length != 0) return layer;
+
+            if (a.Things.Count != b.Things.Count)
+                return "things " + a.Things.Count + " vs " + b.Things.Count;
+
+            for (int i = 0; i < a.Things.Count; ++i)
+            {
+                MapThing x = a.Things[i], y = b.Things[i];
+                if (x.X != y.X || x.Y != y.Y || x.Type != y.Type || x.Flags != y.Flags)
+                    return "thing " + i + " differs";
+            }
+
+            if (a.Switches.Count != b.Switches.Count)
+                return "switches " + a.Switches.Count + " vs " + b.Switches.Count;
+
+            for (int i = 0; i < a.Switches.Count; ++i)
+            {
+                MapSwitch x = a.Switches[i], y = b.Switches[i];
+                if (x.X != y.X || x.Y != y.Y || x.Type != y.Type || x.A != y.A
+                    || x.B != y.B || x.Param != y.Param || x.Flags != y.Flags)
+                    return "switch " + i + " differs";
+            }
+
+            return "";
+        }
+
+        private static string DiffLayer(string name, byte[] a, byte[] b)
+        {
+            for (int i = 0; i < a.Length; ++i)
+                if (a[i] != b[i]) return name + " layer differs at " + i;
+
+            return "";
+        }
+
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
         private static bool Type(string text)
         {

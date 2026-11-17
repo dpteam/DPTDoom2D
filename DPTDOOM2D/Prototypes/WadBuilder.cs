@@ -110,9 +110,71 @@ namespace DPTDOOM2D.Prototypes
             return Write(output, "PWAD", entries);
         }
 
-        private static int Write(string output, string kind, List<KeyValuePair<string, string>> entries)
+        /// <summary>
+        /// Writes a PWAD from lumps already in memory.
+        ///
+        /// The editor needs this: it builds a map in memory and saves it as a WAD
+        /// without going through files on disk. Same directory layout as the file
+        /// form, so a WAD made here is indistinguishable from one made by
+        /// --wadbuild.
+        /// </summary>
+        public static bool WriteLumps(string output, List<KeyValuePair<string, byte[]>> lumps)
         {
             var offsets = new List<int>();
+            var names = new List<string>();
+
+            try
+            {
+                using (var stream = File.Create(output))
+                using (var writer = new BinaryWriter(stream))
+                {
+                    writer.Write(Encoding.ASCII.GetBytes("PWAD".PadRight(4)));
+                    writer.Write(0);              // entry count, patched below
+                    writer.Write(0);              // directory offset, patched below
+
+                    for (int i = 0; i < lumps.Count; ++i)
+                    {
+                        string name = lumps[i].Key.ToUpperInvariant();
+                        if (name.Length > 8) name = name.Substring(0, 8);
+
+                        byte[] data = lumps[i].Value ?? new byte[0];
+
+                        offsets.Add((int)stream.Position);
+                        names.Add(name);
+
+                        writer.Write(data);
+                    }
+
+                    int directoryOffset = (int)stream.Position;
+
+                    for (int i = 0; i < names.Count; ++i)
+                    {
+                        writer.Write(offsets[i]);
+                        writer.Write(lumps[i].Value == null ? 0 : lumps[i].Value.Length);
+
+                        byte[] lump = new byte[8];
+                        byte[] text = Encoding.ASCII.GetBytes(names[i]);
+                        Buffer.BlockCopy(text, 0, lump, 0, Math.Min(8, text.Length));
+                        writer.Write(lump);
+                    }
+
+                    stream.Position = 4;
+                    writer.Write(names.Count);
+                    writer.Write(directoryOffset);
+                    writer.Flush();
+                }
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("wadwrite: " + Log.Describe(e));
+                return false;
+            }
+        }
+
+        private static int Write(string output, string kind, List<KeyValuePair<string, string>> entries)
+        {            var offsets = new List<int>();
             var lengths = new List<int>();
             var names = new List<string>();
 

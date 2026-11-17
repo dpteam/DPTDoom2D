@@ -107,19 +107,19 @@ namespace DPTDOOM2D.Engine
             for (int i = 0; i < TypeCount; ++i)
             {
                 Size size = Sizes[i + 1];
-                hash = Net.NetProtocol.Mix(hash, (uint)size.R);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.H);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.L);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.Mp);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.Rv);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.Jv);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.Sp);
-                hash = Net.NetProtocol.Mix(hash, (uint)size.MinP);
+                hash = Mix(hash, (uint)size.R);
+                hash = Mix(hash, (uint)size.H);
+                hash = Mix(hash, (uint)size.L);
+                hash = Mix(hash, (uint)size.Mp);
+                hash = Mix(hash, (uint)size.Rv);
+                hash = Mix(hash, (uint)size.Jv);
+                hash = Mix(hash, (uint)size.Sp);
+                hash = Mix(hash, (uint)size.MinP);
 
                 hash = MixText(hash, Sprite[i]);
-                hash = Net.NetProtocol.Mix(hash, (uint)Frames[i]);
-                hash = Net.NetProtocol.Mix(hash, (uint)Style[i]);
-                hash = Net.NetProtocol.Mix(hash, (uint)Translation[i]);
+                hash = Mix(hash, (uint)Frames[i]);
+                hash = Mix(hash, (uint)Style[i]);
+                hash = Mix(hash, (uint)Translation[i]);
 
                 for (int s = 0; s < SoundCount; ++s) hash = MixText(hash, Sound[i][s]);
                 for (int l = 0; l < LabelCount; ++l) hash = MixText(hash, Anim[i][l]);
@@ -130,12 +130,30 @@ namespace DPTDOOM2D.Engine
 
         static uint MixText(uint hash, string text)
         {
-            if (text == null) return Net.NetProtocol.Mix(hash, 0);
+            if (text == null) return Mix(hash, 0);
 
-            hash = Net.NetProtocol.Mix(hash, (uint)text.Length);
+            hash = Mix(hash, (uint)text.Length);
             for (int i = 0; i < text.Length; ++i)
-                hash = Net.NetProtocol.Mix(hash, text[i]);
+                hash = Mix(hash, text[i]);
 
+            return hash;
+        }
+
+        /// <summary>
+        /// FNV-1a, the same mixer the tick checksum uses. It lives here rather than in
+        /// NetProtocol so the actor tables can be digested by a tool that has no
+        /// network code compiled in — the editor, for one.
+        /// </summary>
+        static uint Mix(uint hash, uint value)
+        {
+            hash ^= value & 0xFF;
+            hash *= 16777619u;
+            hash ^= (value >> 8) & 0xFF;
+            hash *= 16777619u;
+            hash ^= (value >> 16) & 0xFF;
+            hash *= 16777619u;
+            hash ^= (value >> 24) & 0xFF;
+            hash *= 16777619u;
             return hash;
         }
 

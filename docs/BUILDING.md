@@ -94,6 +94,10 @@ dptdoom2d.exe --cheats
 dptdoom2d.exe --controls
 dptdoom2d.exe --actorcheck
 dptdoom2d.exe --datacheck
+dptdoom2d.exe --mapcheck
+dptdoom2d.exe --mapsave <map> <out.wad>
+dptdoom2d-editor.exe --save <map> <out.wad>
+dptdoom2d-editor.exe --render <map> <out.bmp>
 dptdoom2d.exe --netdata <master>
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
@@ -194,3 +198,4 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 | `tools/relay-test.ps1` | проверка сессии через мастер и релей |
 | `tools/firewall.ps1` | правила брандмауэра для 25145/25146/5041 |
 | `tools/run-master.ps1` | запуск мастера на `0.0.0.0` для внешнего доступа |
+| `tools/bat/*` | батники для дистрибутива (игра, лаунчер, мастер, редактор, логи) |

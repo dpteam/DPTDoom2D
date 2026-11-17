@@ -81,6 +81,7 @@ Russian, in `docs/`:
 - [docs/NETWORK.md](docs/NETWORK.md) — protocol, master, relay
 - [docs/BUILDING.md](docs/BUILDING.md) — build, CI, checks
 - [docs/CONTROLS.md](docs/CONTROLS.md) — keys, the F2 overlay, cheats
+- [docs/EDITOR.md](docs/EDITOR.md) — the map editor
 - [docs/ACTORS.md](docs/ACTORS.md) — the `actors.txt` actor language
 - [docs/ROADMAP.md](docs/ROADMAP.md) — remaining work
 - [docs/PORTING.md](docs/PORTING.md) — port log

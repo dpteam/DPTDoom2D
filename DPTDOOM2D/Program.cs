@@ -102,6 +102,16 @@ namespace DPTDOOM2D
                 }
                 if (args[i] == "--datacheck")
                     return Headless.ManifestCheck();
+                if (args[i] == "--mapcheck")
+                {
+                    Boot();
+                    return Headless.MapCheck();
+                }
+                if (args[i] == "--mapsave" && i + 2 < args.Length)
+                {
+                    Boot();
+                    return MapSave(args[i + 1], args[i + 2]);
+                }
                 if (args[i] == "--netdata" && i + 1 < args.Length)
                 {
                     Boot();
@@ -268,6 +278,45 @@ namespace DPTDOOM2D
             }
 
             return mismatched == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// --mapsave &lt;map&gt; &lt;out.wad&gt;: read a map and write it back as a PWAD.
+        ///
+        /// This is the editor's save path without the editor: the same MapFile writer,
+        /// the same WAD assembly. If the result loads in the game and plays, the
+        /// editor will be able to save maps that work.
+        /// </summary>
+        public static int MapSave(string mapName, string output)
+        {
+            int res = Wad.FindRes(mapName);
+            if (res < 0)
+            {
+                Console.Error.WriteLine("mapsave: карта " + mapName + " не найдена");
+                return 1;
+            }
+
+            try
+            {
+                MapFile map = MapFile.Read(Wad.LoadRes(res), mapName);
+                byte[] lump = map.Write();
+
+                var lumps = new List<KeyValuePair<string, byte[]>>();
+                lumps.Add(new KeyValuePair<string, byte[]>(mapName, lump));
+
+                if (!Prototypes.WadBuilder.WriteLumps(output, lumps))
+                    return 1;
+
+                Console.WriteLine(string.Format("mapsave: {0} -> {1} ({2} KB, {3})",
+                    mapName, Path.GetFileName(output), Math.Max(1, lump.Length / 1024), map.Summary()));
+
+                return 0;
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("mapsave: " + Log.Describe(e));
+                return 1;
+            }
         }
 
         /// <summary>Boots the engine far enough to read the WAD, without opening a window.</summary>

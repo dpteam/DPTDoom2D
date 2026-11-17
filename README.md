@@ -222,6 +222,7 @@ dptdoom2d.exe -net join -master 1.2.3.4:25145 -relay-session <id>
 | [docs/FORMATS.md](docs/FORMATS.md) | WAD, спрайты, карты, сохранения, DMI, XM, DMM |
 | [docs/ACTORS.md](docs/ACTORS.md) | язык акторов `actors.txt`: свойства, состояния, ошибки |
 | [docs/MAPS.md](docs/MAPS.md) | кастомные карты, библиотека паков, редактор |
+| [docs/EDITOR.md](docs/EDITOR.md) | редактор карт: инструменты, сохранение, проверки |
 | [docs/MODS.md](docs/MODS.md) | модкит: PK3, сборка, установка |
 | [docs/PROTOTYPES.md](docs/PROTOTYPES.md) | витрина прототипов: что перенесено и как |
 | [docs/LAUNCHER.md](docs/LAUNCHER.md) | лаунчер: HTML-интерфейс, мост, режимы |

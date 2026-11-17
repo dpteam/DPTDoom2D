@@ -59,6 +59,54 @@ namespace DPTDOOM2D.Win32
         private readonly List<int> pressed = new List<int>();
         private readonly List<int> released = new List<int>();
 
+        // ---- mouse ----------------------------------------------------------
+        //
+        // The mouse is sampled, not queued: an editor or a menu only ever cares
+        // where the pointer is now and which buttons are held. Wheel notches are
+        // the exception — a wheel click can be swallowed by a slow frame, so they
+        // accumulate and the reader takes them once.
+        private int mouseX = -1;
+        private int mouseY = -1;
+        private int mouseButtons;
+        private int wheelTicks;
+        private bool mouseInside;
+
+        /// <summary>Client coordinates of the pointer, -1 when it never entered.</summary>
+        public int MouseX { get { return mouseX; } }
+        public int MouseY { get { return mouseY; } }
+
+        /// <summary>1 = left, 2 = right, 4 = middle, as WM_*BUTTON constants are ordered.</summary>
+        public int MouseButtons { get { return mouseButtons; } }
+
+        /// <summary>True while the pointer is over the client area.</summary>
+        public bool MouseInside { get { return mouseInside; } }
+
+        /// <summary>
+        /// Held modifier keys, as bit flags: 1 shift, 2 control, 4 alt.
+        ///
+        /// Read from the key state the window already tracks, so a shortcut needs no
+        /// extra message handling and works the same in the game and the editor.
+        /// </summary>
+        public int Modifiers
+        {
+            get
+            {
+                int bits = 0;
+                if (keyDown[0x10] || keyDown[0xA0] || keyDown[0xA1]) bits |= 1;
+                if (keyDown[0x11] || keyDown[0xA2] || keyDown[0xA3]) bits |= 2;
+                if (keyDown[0x12] || keyDown[0xA4] || keyDown[0xA5]) bits |= 4;
+                return bits;
+            }
+        }
+
+        /// <summary>Wheel notches since the last call: positive is away from the user.</summary>
+        public int TakeWheel()
+        {
+            int ticks = wheelTicks;
+            wheelTicks = 0;
+            return ticks;
+        }
+
         private IntPtr pixels;
         private int pixelWidth;
         private int pixelHeight;
@@ -353,19 +401,11 @@ namespace DPTDOOM2D.Win32
             {
                 // Integer factor only: pixels stay square, the remainder is
                 // letterboxed. This is the "as the original looked" mode.
-                int factor = Scale;
-                if (factor <= 0)
-                {
-                    int byWidth = clientWidth / pixelWidth;
-                    int byHeight = clientHeight / pixelHeight;
-                    factor = Math.Min(byWidth, byHeight);
-                }
-                if (factor < 1) factor = 1;
+                int factorX, factorY;
+                FrameLayout(out factorX, out factorY, out offX, out offY);
 
-                dstW = pixelWidth * factor;
-                dstH = pixelHeight * factor;
-                offX = (clientWidth - dstW) / 2;
-                offY = (clientHeight - dstH) / 2;
+                dstW = pixelWidth * factorX;
+                dstH = pixelHeight * factorY;
             }
             else
             {
@@ -623,10 +663,152 @@ namespace DPTDOOM2D.Win32
                 case NativeMethods.WM_KILLFOCUS:
                     focused = false;
                     ReleaseAllKeys();
+                    mouseButtons = 0;
                     break;
+
+                case NativeMethods.WM_MOUSEMOVE:
+                    TrackMouse(lParam.ToInt64());
+                    mouseInside = true;
+                    return IntPtr.Zero;
+
+                case NativeMethods.WM_LBUTTONDOWN:
+                case NativeMethods.WM_LBUTTONUP:
+                case NativeMethods.WM_RBUTTONDOWN:
+                case NativeMethods.WM_RBUTTONUP:
+                case NativeMethods.WM_MBUTTONDOWN:
+                case NativeMethods.WM_MBUTTONUP:
+                    TrackMouse(lParam.ToInt64());
+                    SetButton(msg, true);
+                    return IntPtr.Zero;
+
+                case NativeMethods.WM_MOUSEWHEEL:
+                    {
+                        // The wheel message carries screen coordinates, not client
+                        // ones, so the position is left as it is and only the notch
+                        // count is taken: no editor needs a wheel position.
+                        int delta = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
+                        wheelTicks += delta / 120;
+                        return IntPtr.Zero;
+                    }
             }
 
             return NativeMethods.DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+
+        private void TrackMouse(long lParam)
+        {
+            int x = (short)(lParam & 0xFFFF);
+            int y = (short)((lParam >> 16) & 0xFFFF);
+
+            // A fullscreen window can be told a position outside itself while a
+            // button is held; clamping keeps a brush stroke from wrapping around.
+            mouseX = x < 0 ? 0 : x;
+            mouseY = y < 0 ? 0 : y;
+        }
+
+        private void SetButton(uint msg, bool down)
+        {
+            int bit = 0;
+
+            switch (msg)
+            {
+                case NativeMethods.WM_LBUTTONDOWN:
+                case NativeMethods.WM_LBUTTONUP:
+                    bit = 1;
+                    break;
+
+                case NativeMethods.WM_RBUTTONDOWN:
+                case NativeMethods.WM_RBUTTONUP:
+                    bit = 2;
+                    break;
+
+                case NativeMethods.WM_MBUTTONDOWN:
+                case NativeMethods.WM_MBUTTONUP:
+                    bit = 4;
+                    break;
+            }
+
+            bool pressedNow = msg == NativeMethods.WM_LBUTTONDOWN
+                || msg == NativeMethods.WM_RBUTTONDOWN
+                || msg == NativeMethods.WM_MBUTTONDOWN;
+
+            if (pressedNow) mouseButtons |= bit;
+            else mouseButtons &= ~bit;
+        }
+
+        /// <summary>
+        /// Where the 320x200 frame lands inside the client area.
+        ///
+        /// The blitter, the mouse mapping and any overlay all have to agree on this
+        /// or a click lands on the wrong pixel. One function computes it and
+        /// everything else asks: with PixelPerfect it is an integer factor with
+        /// letterbox bars, otherwise the frame fills the client area.
+        /// </summary>
+        public void FrameLayout(out int factorX, out int factorY, out int offX, out int offY)
+        {
+            if (Stretch == StretchMode.PixelPerfect)
+            {
+                int factor = Scale;
+                if (factor <= 0)
+                {
+                    int byWidth = clientWidth / baseWidth;
+                    int byHeight = clientHeight / baseHeight;
+                    factor = Math.Min(byWidth, byHeight);
+                }
+                if (factor < 1) factor = 1;
+
+                factorX = factor;
+                factorY = factor;
+                offX = (clientWidth - baseWidth * factor) / 2;
+                offY = (clientHeight - baseHeight * factor) / 2;
+                return;
+            }
+
+            // Fill mode: the frame is stretched, so the two factors differ.
+            factorX = clientWidth > 0 ? clientWidth : baseWidth;
+            factorY = clientHeight > 0 ? clientHeight : baseHeight;
+            offX = 0;
+            offY = 0;
+        }
+
+        /// <summary>Logical frame pixel to client pixel, using the blitter's layout.</summary>
+        public void FrameToClient(int x, int y, out int clientX, out int clientY)
+        {
+            int factorX, factorY, offX, offY;
+            FrameLayout(out factorX, out factorY, out offX, out offY);
+
+            if (Stretch == StretchMode.PixelPerfect)
+            {
+                clientX = offX + x * factorX;
+                clientY = offY + y * factorY;
+                return;
+            }
+
+            clientX = (int)((long)x * factorX / baseWidth);
+            clientY = (int)((long)y * factorY / baseHeight);
+        }
+
+        /// <summary>Client point to framebuffer pixel, following the same layout.</summary>
+        public void MouseToFrame(out int x, out int y)
+        {
+            int factorX, factorY, offX, offY;
+            FrameLayout(out factorX, out factorY, out offX, out offY);
+
+            if (Stretch == StretchMode.PixelPerfect)
+            {
+                x = factorX > 0 ? (mouseX - offX) / factorX : 0;
+                y = factorY > 0 ? (mouseY - offY) / factorY : 0;
+            }
+            else
+            {
+                x = factorX > 0 ? (int)((long)mouseX * baseWidth / factorX) : 0;
+                y = factorY > 0 ? (int)((long)mouseY * baseHeight / factorY) : 0;
+            }
+
+            if (x < 0) x = 0;
+            if (y < 0) y = 0;
+            if (x >= baseWidth) x = baseWidth - 1;
+            if (y >= baseHeight) y = baseHeight - 1;
         }
 
         private void OnKeyDown(int vk, long lParam)

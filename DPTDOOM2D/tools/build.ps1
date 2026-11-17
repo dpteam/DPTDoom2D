@@ -46,6 +46,7 @@ $output = Join-Path $root "bin\$Configuration\net40"
 $exe = Join-Path $output 'dptdoom2d.exe'
 $launcher = Join-Path $root "..\DPTDOOM2D.Launcher\bin\$Configuration\net40\dptdoom2d-launcher.exe"
 $master = Join-Path $root "..\DPTDOOM2D.Master\bin\$Configuration\net40\dptdoom2d-master.exe"
+$editor = Join-Path $root "..\DPTDOOM2D.Editor\bin\$Configuration\net40\dptdoom2d-editor.exe"
 
 function Fail([string]$message)
 {
@@ -170,6 +171,47 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  manifest FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  manifest ok' -ForegroundColor DarkGray }
 
+		# Map writer: every map in the game and in the 166 custom packs has to survive
+		# a read-write-read round trip byte for byte. The editor cannot save a map
+		# until this passes, because a writer that is "almost right" corrupts levels.
+		& $exe --mapcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  map writer FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  map writer ok' -ForegroundColor DarkGray }
+
+		# ...and a map written out has to load and play identically, not just parse.
+		$savedMap = Join-Path $tmp 'saved-map.wad'
+		Remove-Item $savedMap -Force -ErrorAction SilentlyContinue
+		& $exe --mapsave MAP01 $savedMap 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  mapsave FAILED' -ForegroundColor Red; $failed++ }
+		else
+		{
+			& $exe -file $savedMap --simulate 120 (Join-Path $tmp 'saved-map.bmp') 1 '5:right' 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  saved map does not load' -ForegroundColor Red; $failed++ }
+			else { Write-Host '  map writer ok' -ForegroundColor DarkGray }
+		}
+
+		# The editor writes maps through its own save path; a map saved there has to
+		# load in the game too, or the editor is a very convincing way to lose work.
+		$editorExe = Join-Path $root "..\DPTDOOM2D.Editor\bin\$Configuration\net40\dptdoom2d-editor.exe"
+		if (Test-Path $editorExe)
+		{
+			$editorMap = Join-Path $tmp 'editor-map.wad'
+			Remove-Item $editorMap -Force -ErrorAction SilentlyContinue
+
+			& $editorExe --save MAP02 $editorMap 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0 -or -not (Test-Path $editorMap)) { Write-Host '  editor save FAILED' -ForegroundColor Red; $failed++ }
+			else
+			{
+				& $exe -file $editorMap --simulate 60 (Join-Path $tmp 'editor-map.bmp') 2 2>&1 | Out-Null
+				if ($LASTEXITCODE -ne 0) { Write-Host '  editor map does not load' -ForegroundColor Red; $failed++ }
+				else { Write-Host '  editor save ok' -ForegroundColor DarkGray }
+			}
+		}
+		else
+		{
+			Write-Host '  editor not built, skipping its save check' -ForegroundColor DarkGray
+		}
+
 		# Mod kit: build a PK3 out of a map pack, list it, and load it back. This is
 		# the whole mod workflow in one round trip.
 		$modSrc = Join-Path $tmp 'modsrc'
@@ -254,6 +296,7 @@ try
 		Copy-Item (Join-Path $output 'dptdoom2d.exe.config') $dist
 		Copy-Item $launcher $dist
 		Copy-Item $master $dist
+		Copy-Item $editor $dist
 		Copy-Item (Join-Path $output 'Data') (Join-Path $dist 'Data') -Recurse
 
 		# GPLv2 requires the license to travel with the binaries.

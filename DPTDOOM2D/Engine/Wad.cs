@@ -328,6 +328,26 @@ namespace DPTDOOM2D.Engine
         /// <summary>F_getsprid: returns the resource id, bit 0x8000 = mirrored.</summary>
         public static int GetSprId(string name, int s, int d)
         {
+            int id = TryGetSprId(name, s, d);
+            if (id < 0)
+            {
+                throw new Fatal(string.Format("F_getsprid: изображение {0}{1}{2} не найдено",
+                    name, (char)('A' + s), (char)('0' + d)));
+            }
+
+            return id;
+        }
+
+        /// <summary>
+        /// The sprite lookup without the fatal error: -1 when the frame is missing.
+        ///
+        /// A mod may replace a sprite set with fewer frames, and a tool that only
+        /// wants a picture of a thing must not die because frame B of it is absent.
+        /// The game keeps using <see cref="GetSprId"/>, where a missing sprite is a
+        /// real error.
+        /// </summary>
+        public static int TryGetSprId(string name, int s, int d)
+        {
             int frame = 'A' + s;
             int dir = '0' + d;
 
@@ -346,8 +366,7 @@ namespace DPTDOOM2D.Engine
                 if (b == dir) return i | 0x8000;
             }
 
-            throw new Fatal(string.Format("F_getsprid: изображение {0}{1}{2} не найдено",
-                name, (char)frame, (char)dir));
+            return -1;
         }
 
         static char CharAt(string s, int i)

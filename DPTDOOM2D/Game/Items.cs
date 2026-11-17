@@ -15,23 +15,7 @@ namespace DPTDOOM2D.Game
     }
 
     /// <summary>things.h — the TH_* types written in map files.</summary>
-    public static class ThingType
-    {
-        public const int None = 0;
-        public const int Plr1 = 1, Plr2 = 2, DmStart = 3;
-
-        public const int Clip = 100;
-        // Clip..Gun2 are consecutive, matching ItemType + 99.
-        public const int LastItem = 135;
-
-        public const int Demon = 200;
-        public const int LastMonster = 220;
-
-        public const int Dir = 1;
-        public const int Dm = 16;
-    }
-
-    /// <summary>items.c — everything lying on the floor.</summary>
+    /// <summary>items.c - everything lying on the floor.</summary>
     public static class Items
     {
         public const int MaxItem = 300;

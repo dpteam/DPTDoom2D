@@ -455,21 +455,6 @@ namespace DPTDOOM2D.Game
         }
     }
 
-    public static class MapBlockType
-    {
-        public const int Comment = -1;
-        public const int End = 0;
-        public const int WallNames = 1;
-        public const int Back = 2;
-        public const int WType = 3;
-        public const int Front = 4;
-        public const int Thing = 5;
-        public const int Switch = 6;
-        public const int Music = 7;
-        public const int Sky = 8;
-        public const int Switch2 = 9;
-    }
-
     public sealed class MapBlock
     {
         public int T;
