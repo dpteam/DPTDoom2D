@@ -93,6 +93,8 @@ namespace DPTDOOM2D
                     Boot();
                     return Headless.CheatCheck();
                 }
+                if (args[i] == "--controls")
+                    return Headless.ControlsCheck();
                 if (args[i] == "--modbuild" && i + 2 < args.Length)
                 {
                     var inputs = new string[args.Length - i - 2];

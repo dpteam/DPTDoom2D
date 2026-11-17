@@ -20,8 +20,21 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 
+  <!--
+    The shared protocol is compiled in rather than referenced as an assembly.
+
+    A project reference puts DPTDOOM2D.Shared.dll next to the exe, and that DLL
+    is exactly what went missing from the packaged build: the launcher then threw
+    "Could not load file or assembly DPTDOOM2D.Shared" as soon as the server list
+    was refreshed. Compiling the same sources in - the way the game already does -
+    makes the launcher one exe with nothing beside it.
+  -->
   <ItemGroup>
-    <ProjectReference Include="..\DPTDOOM2D.Shared\DPTDOOM2D.Shared.csproj" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterProtocol.cs" Link="Shared\MasterProtocol.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterSessionInfo.cs" Link="Shared\MasterSessionInfo.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\MasterClient.cs" Link="Shared\MasterClient.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\Branding.cs" Link="Shared\Branding.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\PortablePaths.cs" Link="Shared\PortablePaths.cs" />
   </ItemGroup>
 
   <!--

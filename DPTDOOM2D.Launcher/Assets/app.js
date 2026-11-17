@@ -29,6 +29,7 @@
         master: 'play.dartpower.xyz:25145',
         relaySession: '',
         address: '127.0.0.1',
+        layout: '',
         name: 'Player'
     };
 
@@ -67,7 +68,7 @@
             state.mode, state.game, state.map, state.mapPack, state.scale,
             state.stretch, state.fullscreen, state.port, state.password,
             state.master, state.relaySession, state.address, state.name,
-            enabledMods.join('|')
+            enabledMods.join('|'), state.layout
         ].join('\n');
     }
 
@@ -89,6 +90,7 @@
         if (parts.length > 11) { state.address = parts[11]; }
         if (parts.length > 12) { state.name = parts[12]; }
         if (parts.length > 13 && parts[13]) { enabledMods = parts[13].split('|'); }
+        if (parts.length > 14) { state.layout = parts[14]; }
     }
 
     function applyState() {
@@ -104,6 +106,7 @@
         $('scale').value = state.scale;
         $('stretch').value = state.stretch;
         $('fullscreen').checked = state.fullscreen === '1';
+        $('layout').value = state.layout;
 
         setMode(state.mode);
         renderMapPack();
@@ -121,6 +124,7 @@
         state.scale = $('scale').value;
         state.stretch = $('stretch').value;
         state.fullscreen = $('fullscreen').checked ? '1' : '0';
+        state.layout = $('layout').value;
         state.map = $('map').value;
         state.mapPack = $('mapPack').value;
     }
@@ -441,7 +445,7 @@
         };
 
         var inputs = ['executable', 'playerName', 'port', 'password', 'masterInline',
-                      'relaySessionInline', 'address', 'scale', 'stretch'];
+                      'relaySessionInline', 'address', 'scale', 'stretch', 'layout'];
 
         for (var j = 0; j < inputs.length; ++j) {
             (function (id) {

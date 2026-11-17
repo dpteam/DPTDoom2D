@@ -152,25 +152,37 @@ namespace DPTDOOM2D.Engine
             // would overwrite them with its defaults. Config.ApplyBindings() is
             // called after Init() so the file wins, which is what a player editing
             // default.cfg expects.
-            AddKey(null, "pl1_left", "pl1_left");
-            AddKey(null, "pl1_right", "pl1_right");
-            AddKey(null, "pl1_up", "pl1_up");
-            AddKey(null, "pl1_down", "pl1_down");
-            AddKey(null, "pl1_jump", "pl1_jump");
-            AddKey(null, "pl1_fire", "pl1_fire");
-            AddKey(null, "pl1_next", "pl1_next");
-            AddKey(null, "pl1_prev", "pl1_prev");
-            AddKey(null, "pl1_use", "pl1_use");
+            //
+            // Each key also has a command-line name, so a launcher or a shortcut can
+            // set a single binding without writing a config file.
+            AddKey("pl1_left", "pl1_left", "pl1_left");
+            AddKey("pl1_right", "pl1_right", "pl1_right");
+            AddKey("pl1_up", "pl1_up", "pl1_up");
+            AddKey("pl1_down", "pl1_down", "pl1_down");
+            AddKey("pl1_jump", "pl1_jump", "pl1_jump");
+            AddKey("pl1_fire", "pl1_fire", "pl1_fire");
+            AddKey("pl1_next", "pl1_next", "pl1_next");
+            AddKey("pl1_prev", "pl1_prev", "pl1_prev");
+            AddKey("pl1_use", "pl1_use", "pl1_use");
 
-            AddKey(null, "pl2_left", "pl2_left");
-            AddKey(null, "pl2_right", "pl2_right");
-            AddKey(null, "pl2_up", "pl2_up");
-            AddKey(null, "pl2_down", "pl2_down");
-            AddKey(null, "pl2_jump", "pl2_jump");
-            AddKey(null, "pl2_fire", "pl2_fire");
-            AddKey(null, "pl2_next", "pl2_next");
-            AddKey(null, "pl2_prev", "pl2_prev");
-            AddKey(null, "pl2_use", "pl2_use");
+            AddKey("pl2_left", "pl2_left", "pl2_left");
+            AddKey("pl2_right", "pl2_right", "pl2_right");
+            AddKey("pl2_up", "pl2_up", "pl2_up");
+            AddKey("pl2_down", "pl2_down", "pl2_down");
+            AddKey("pl2_jump", "pl2_jump", "pl2_jump");
+            AddKey("pl2_fire", "pl2_fire", "pl2_fire");
+            AddKey("pl2_next", "pl2_next", "pl2_next");
+            AddKey("pl2_prev", "pl2_prev", "pl2_prev");
+            AddKey("pl2_use", "pl2_use", "pl2_use");
+
+            // -layout 1|2 picks a whole preset (see Controls). A preset is a complete
+            // key set: it is applied first, so the key lines below it in the file act
+            // as overrides rather than being silently replaced.
+            AddNumber("layout", "layout", v => Controls.RequestedPreset = Controls.ClampPreset(v));
+
+            // The preset a saved set of keys belongs to, written by SaveControls. No
+            // command-line form: on the command line the request is -layout itself.
+            AddNumber(null, "layout_saved", v => Controls.SavedPreset = Controls.ClampPreset(v));
 
             AddString("config", null, v => CfgFile = v);
 
@@ -240,7 +252,10 @@ namespace DPTDOOM2D.Engine
             e.SetKey = v =>
             {
                 int k = KeyByName(v);
-                if (k != 0) PendingKeys[binding] = k;
+                if (k == 0) return;
+
+                if (parsingSaved) SavedKeys[binding] = k;
+                else PendingKeys[binding] = k;
             };
             table.Add(e);
         }
@@ -249,34 +264,113 @@ namespace DPTDOOM2D.Engine
         static readonly Dictionary<string, int> PendingKeys = new Dictionary<string, int>();
 
         /// <summary>
-        /// Applies the bindings from default.cfg on top of the defaults from
-        /// main.c. Called once, after Game.Init() has set those defaults.
+        /// Key bindings from Storage/default.cfg, i.e. what the F2 overlay saved.
+        /// Kept apart from <see cref="PendingKeys"/> because a saved snapshot belongs
+        /// to one preset while a key line in default.cfg is a plain choice.
+        /// </summary>
+        static readonly Dictionary<string, int> SavedKeys = new Dictionary<string, int>();
+
+        /// <summary>True while ParseFile walks Storage/default.cfg.</summary>
+        static bool parsingSaved;
+
+        /// <summary>
+        /// Applies the preset and the bindings on top of the defaults from main.c.
+        /// Called once, after Game.Init() has set those defaults.
+        ///
+        /// Two kinds of bindings meet here:
+        ///
+        ///   * key lines from a config file — an explicit choice, applied over the
+        ///     preset like any other setting;
+        ///   * keys saved by the F2 overlay in Storage/default.cfg — a snapshot of a
+        ///     preset plus edits, so they only count for the preset they were
+        ///     recorded on. Choosing "preset 1" in the launcher while the saved keys
+        ///     belong to preset 2 must give preset 1, not preset 2 with old edits.
         /// </summary>
         public static void ApplyBindings()
         {
-            foreach (KeyValuePair<string, int> pair in PendingKeys)
-                AssignBinding(pair.Key, pair.Value);
+            int requested = Controls.RequestedPreset;
+            int preset = requested != 0
+                ? requested
+                : (Controls.SavedPreset != 0 ? Controls.SavedPreset : Controls.DefaultPreset);
 
-            if (PendingKeys.Count > 0)
-                Log.Info("config: " + PendingKeys.Count + " key binding(s) from " + CfgFile);
+            Controls.Apply(preset);
+
+            bool useSaved = Controls.SavedKeysApply(requested, Controls.SavedPreset);
+            int applied = 0;
+
+            foreach (KeyValuePair<string, int> pair in PendingKeys)
+            {
+                AssignBinding(pair.Key, pair.Value);
+                ++applied;
+            }
+
+            if (useSaved)
+            {
+                foreach (KeyValuePair<string, int> pair in SavedKeys)
+                {
+                    AssignBinding(pair.Key, pair.Value);
+                    ++applied;
+                }
+            }
+            else if (SavedKeys.Count > 0)
+            {
+                Log.Info("controls: ignoring " + SavedKeys.Count
+                    + " saved key(s) from layout " + Controls.PresetName(Controls.SavedPreset)
+                    + ", layout " + Controls.PresetName(preset) + " was requested");
+            }
+
+            if (applied > 0)
+                Log.Info("config: " + applied + " key binding(s) from " + CfgFile);
+
+            Log.Info("controls: layout " + Controls.PresetName(Controls.MatchPreset())
+                + " (base " + Controls.PresetName(Controls.BasePreset) + ")");
         }
 
         private static void AssignBinding(string name, int k)
         {
             PlayerData p = name.StartsWith("pl2_", StringComparison.Ordinal) ? Game.Game.Pl2 : Game.Game.Pl1;
-            string action = name.Substring(4);
+            Controls.Set(p, name.Substring(4), k);
+        }
 
-            switch (action)
+        /// <summary>Storage/default.cfg: what the F2 overlay saved (layout and keys).</summary>
+        public static string UserCfgPath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Storage", CfgFile); }
+        }
+
+        /// <summary>
+        /// Writes the current bindings to Storage/default.cfg after a change in the
+        /// F2 overlay. Only the controls go there: the rest of the settings belong to
+        /// the launcher, and rewriting the shipped file would throw them away.
+        /// </summary>
+        public static bool SaveControls()
+        {
+            try
             {
-                case "left": p.Kl = k; break;
-                case "right": p.Kr = k; break;
-                case "up": p.Ku = k; break;
-                case "down": p.Kd = k; break;
-                case "jump": p.Kj = k; break;
-                case "fire": p.Kf = k; break;
-                case "next": p.Kwr = k; break;
-                case "prev": p.Kwl = k; break;
-                case "use": p.Kp = k; break;
+                var text = new StringBuilder();
+                text.AppendLine("; DPT.DOOM 2D - controls saved from the F2 overlay (Keys tab).");
+                text.AppendLine("; Delete this file to go back to the layout preset.");
+                text.AppendLine("; layout_saved is the preset these keys were built on: asking for");
+                text.AppendLine("; another one with -layout ignores them instead of mixing layouts.");
+                text.AppendLine("layout_saved=" + Controls.BasePreset);
+
+                for (int i = 0; i < Controls.Actions.Length; ++i)
+                {
+                    string action = Controls.Actions[i];
+                    text.AppendLine("pl1_" + action + "=" + Controls.KeyName(Controls.Get(Game.Game.Pl1, action)));
+                    text.AppendLine("pl2_" + action + "=" + Controls.KeyName(Controls.Get(Game.Game.Pl2, action)));
+                }
+
+                string path = UserCfgPath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, text.ToString(), Encoding.ASCII);
+                return true;
+            }
+            catch (Exception e)
+            {
+                // A read-only installation still gets the new keys for this run.
+                Log.Info("controls: could not save " + UserCfgPath + " (" + e.Message + ")");
+                return false;
             }
         }
         static long ParseNumber(string s)
@@ -363,40 +457,70 @@ namespace DPTDOOM2D.Engine
         {
             string path = FindCfg();
             if (path == null)
-            {
                 Console.Error.WriteLine("default.cfg не найден");
-                return;
-            }
+            else
+                ParseFile(path, false);
 
-            foreach (string raw in File.ReadAllLines(path, Encoding.GetEncoding(1251)))
+            // Storage/default.cfg holds what the F2 overlay saved (layout and keys).
+            // It is read after the shipped file so it wins, the same way launcher.cfg
+            // wins over the defaults for the video settings.
+            string user = UserCfgPath;
+            if (File.Exists(user) && (path == null || !SamePath(path, user)))
+                ParseFile(user, true);
+        }
+
+        static bool SamePath(string a, string b)
+        {
+            try
             {
-                string line = raw.Trim();
-                if (line.Length == 0) continue;
-                if (line[0] == ';' || line.StartsWith(";;")) continue;
+                return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
-                int eq = line.IndexOf('=');
-                if (eq <= 0) continue;
+        static void ParseFile(string path, bool saved)
+        {
+            parsingSaved = saved;
 
-                string key = line.Substring(0, eq).Trim();
-                string value = line.Substring(eq + 1).Trim();
-                if (value.Length == 0) continue;
-
-                Entry e = FindCfg(key);
-                if (e == null || e.Done) continue;
-
-                if (e.Kind == Kind.SwitchOn || e.Kind == Kind.SwitchOff)
+            try
+            {
+                foreach (string raw in File.ReadAllLines(path, Encoding.GetEncoding(1251)))
                 {
-                    // cfg.c accepted ON, OFF or a number for a switch; keep that,
-                    // but apply the value through the shared setter so "off" means
-                    // false no matter which half of the pair matched.
-                    bool on = string.Equals(value, "on", StringComparison.OrdinalIgnoreCase);
-                    bool off = string.Equals(value, "off", StringComparison.OrdinalIgnoreCase);
+                    string line = raw.Trim();
+                    if (line.Length == 0) continue;
+                    if (line[0] == ';' || line.StartsWith(";;")) continue;
 
-                    if (on) e.SetBool(true);
-                    else if (off) e.SetBool(false);
-                    else e.SetBool(ParseNumber(value) != 0);
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+
+                    string key = line.Substring(0, eq).Trim();
+                    string value = line.Substring(eq + 1).Trim();
+                    if (value.Length == 0) continue;
+
+                    Entry e = FindCfg(key);
+                    if (e == null || e.Done) continue;
+
+                    if (e.Kind == Kind.SwitchOn || e.Kind == Kind.SwitchOff)
+                    {
+                        // cfg.c accepted ON, OFF or a number for a switch; keep that,
+                        // but apply the value through the shared setter so "off" means
+                        // false no matter which half of the pair matched.
+                        bool on = string.Equals(value, "on", StringComparison.OrdinalIgnoreCase);
+                        bool off = string.Equals(value, "off", StringComparison.OrdinalIgnoreCase);
+
+                        if (on) e.SetBool(true);
+                        else if (off) e.SetBool(false);
+                        else e.SetBool(ParseNumber(value) != 0);
+                    }
+                    else ApplyValue(e, value);
                 }
-                else ApplyValue(e, value);
+            }
+            finally
+            {
+                parsingSaved = false;
             }
         }
 

@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Text;
 using DPTDOOM2D.Engine;
 using DPTDOOM2D.Audio;
 using DPTDOOM2D.Game;
@@ -244,6 +246,194 @@ namespace DPTDOOM2D
             return failed == 0 ? 0 : 1;
         }
 
+        /// <summary>
+        /// --controls: both layout presets, and the round trip a saved binding makes
+        /// through default.cfg.
+        ///
+        /// The round trip is the part that matters. The overlay stores a binding by
+        /// name, so a name Config.KeyByName cannot read would make a rebind work
+        /// until the next start and then silently disappear.
+        /// </summary>
+        public static int ControlsCheck()
+        {
+            int failed = 0;
+
+            failed += ConfigFileCheck();
+
+            Controls.Apply(1);
+            failed += Check("preset 1 is recognised", Controls.MatchPreset() == 1);
+            failed += Check("preset 1: P1 moves with the arrows",
+                Controls.Get(DGame.Pl1, "left") == Kbd.SDLK_LEFT
+                && Controls.Get(DGame.Pl1, "right") == Kbd.SDLK_RIGHT
+                && Controls.Get(DGame.Pl1, "up") == Kbd.SDLK_UP
+                && Controls.Get(DGame.Pl1, "down") == Kbd.SDLK_DOWN);
+            failed += Check("preset 1: P1 fires with Z, jumps with X",
+                Controls.Get(DGame.Pl1, "fire") == 'z' && Controls.Get(DGame.Pl1, "jump") == 'x');
+            failed += Check("preset 1: the two players share no key", NoOverlap());
+
+            Controls.Apply(2);
+            failed += Check("preset 2 is recognised", Controls.MatchPreset() == 2);
+            failed += Check("preset 2: main.c's numpad, page down and delete",
+                Controls.Get(DGame.Pl1, "up") == Kbd.SDLK_KP8
+                && Controls.Get(DGame.Pl1, "down") == Kbd.SDLK_KP5
+                && Controls.Get(DGame.Pl1, "left") == Kbd.SDLK_KP4
+                && Controls.Get(DGame.Pl1, "right") == Kbd.SDLK_KP6
+                && Controls.Get(DGame.Pl1, "fire") == Kbd.SDLK_PAGEDOWN
+                && Controls.Get(DGame.Pl1, "jump") == Kbd.SDLK_DELETE
+                && Controls.Get(DGame.Pl1, "prev") == Kbd.SDLK_HOME
+                && Controls.Get(DGame.Pl1, "next") == Kbd.SDLK_END
+                && Controls.Get(DGame.Pl1, "use") == Kbd.SDLK_KP8);
+            failed += Check("preset 2: main.c's letters for P2",
+                Controls.Get(DGame.Pl2, "up") == 'e' && Controls.Get(DGame.Pl2, "down") == 'd'
+                && Controls.Get(DGame.Pl2, "left") == 's' && Controls.Get(DGame.Pl2, "right") == 'f'
+                && Controls.Get(DGame.Pl2, "fire") == 'a' && Controls.Get(DGame.Pl2, "jump") == 'q');
+
+            failed += RoundTrip("preset 1", 1);
+            failed += RoundTrip("preset 2", 2);
+
+            // Rebinding one key has to read back as custom, or the overlay would
+            // keep claiming a preset it no longer matches.
+            Controls.Apply(1);
+            Controls.Set(DGame.Pl1, "jump", 'k');
+            failed += Check("a rebind reads back as custom", Controls.MatchPreset() == 0);
+
+            // Leave the process on the default layout: later checks in the same run
+            // (and a developer reading logs) should not inherit the test's edits.
+            Controls.Apply(Controls.DefaultPreset);
+
+            Console.WriteLine(failed == 0
+                ? "controls: 2 layouts ok"
+                : "controls: " + failed + " failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// The config path end to end: a file with layout=2 has to give preset 2, a key
+        /// line has to survive on top of it, and a saved overlay set has to be tied to
+        /// the preset it was recorded on.
+        /// </summary>
+        private static int ConfigFileCheck()
+        {
+            string temp = Path.Combine(Path.GetTempPath(), "dptdoom2d-controls.cfg");
+            string previous = Config.CfgFile;
+            int previousSaved = Controls.SavedPreset;
+            int failed = 0;
+
+            try
+            {
+                // An absolute path makes Path.Combine ignore the folder, so both the
+                // shipped file and the user file resolve to this one file.
+                Config.CfgFile = temp;
+                Controls.SavedPreset = 0;
+
+                File.WriteAllText(temp, "layout=2\r\npl1_jump=x\r\n", Encoding.ASCII);
+                Controls.Apply(1);
+                Controls.RequestedPreset = 0;
+                Config.Load();
+                Config.ApplyBindings();
+
+                failed += Check("layout=2 applies the numpad preset",
+                    Controls.Get(DGame.Pl1, "fire") == Kbd.SDLK_PAGEDOWN
+                    && Controls.Get(DGame.Pl1, "up") == Kbd.SDLK_KP8
+                    && Controls.BasePreset == 2);
+
+                // A key line in the file is an explicit choice, so it refines the
+                // preset instead of being replaced by it.
+                failed += Check("a key line refines the preset",
+                    Controls.Get(DGame.Pl1, "jump") == 'x');
+
+                File.WriteAllText(temp, "pl1_jump=n\r\n", Encoding.ASCII);
+                Controls.Apply(1);
+                Controls.RequestedPreset = 0;
+                Config.Load();
+                Config.ApplyBindings();
+
+                failed += Check("a key line without a preset is kept",
+                    Controls.Get(DGame.Pl1, "jump") == 'n'
+                    && Controls.Get(DGame.Pl1, "fire") == 'z');
+                failed += Check("an edited key set reads back as custom",
+                    Controls.MatchPreset() == 0);
+
+                // -layout is what the launcher passes; the command line and the file
+                // share one entry, so the option works the same way.
+                Config.ParseArgs(new[] { "-layout", "2" });
+                Controls.Apply(1);
+                Config.ApplyBindings();
+                failed += Check("-layout 2 on the command line applies the preset",
+                    Controls.Get(DGame.Pl1, "fire") == Kbd.SDLK_PAGEDOWN
+                    && Controls.BasePreset == 2);
+
+                // Saved keys belong to one preset: the same preset keeps them, another
+                // one drops them rather than mixing two layouts together.
+                failed += Check("saved keys survive the same preset",
+                    Controls.SavedKeysApply(1, 1) && Controls.SavedKeysApply(2, 2));
+                failed += Check("saved keys are dropped for another preset",
+                    !Controls.SavedKeysApply(2, 1) && !Controls.SavedKeysApply(1, 2));
+                failed += Check("without a request the saved preset is used",
+                    Controls.SavedKeysApply(0, 1) && Controls.SavedKeysApply(0, 2));
+            }
+            finally
+            {
+                Config.CfgFile = previous;
+                Controls.RequestedPreset = 0;
+                Controls.SavedPreset = previousSaved;
+                try { File.Delete(temp); } catch { }
+            }
+
+            return failed;
+        }
+
+        /// <summary>Both players use different keys, so two people can share a keyboard.</summary>
+        private static bool NoOverlap()
+        {
+            for (int i = 0; i < Controls.Actions.Length; ++i)
+            {
+                for (int j = 0; j < Controls.Actions.Length; ++j)
+                {
+                    if (Controls.Get(DGame.Pl1, Controls.Actions[i])
+                        == Controls.Get(DGame.Pl2, Controls.Actions[j]))
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>Every key of a preset must survive KeyName → KeyByName.</summary>
+        private static int RoundTrip(string what, int preset)
+        {
+            Controls.Apply(preset);
+
+            int failed = 0;
+            for (int i = 0; i < Controls.Actions.Length; ++i)
+            {
+                string action = Controls.Actions[i];
+
+                if (!One(what, "P1 " + action, Controls.Get(DGame.Pl1, action))) ++failed;
+                if (!One(what, "P2 " + action, Controls.Get(DGame.Pl2, action))) ++failed;
+            }
+
+            return failed;
+        }
+
+        private static bool One(string what, string binding, int sym)
+        {
+            string name = Controls.KeyName(sym);
+            int back = Config.KeyByName(name);
+
+            if (back == sym) return true;
+
+            Console.WriteLine("  " + what + ": " + binding + " = \"" + name + "\" reads back as " + back);
+            return false;
+        }
+
+        private static int Check(string name, bool ok)
+        {
+            if (!ok) Console.WriteLine("  " + name + ": FAILED");
+            return ok ? 0 : 1;
+        }
+
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
         private static bool Type(string text)
         {
@@ -367,17 +557,21 @@ namespace DPTDOOM2D
         /// <summary>Names map to the default bindings from main.c, not to the arrow keys.</summary>
         static int KeyByName(string name)
         {
+            // Action names follow the layout in force, so "40:fire" in a --simulate
+            // script means the key the player actually fires with, not the numpad key
+            // main.c happened to use. The numpad values stay as the fallback for a
+            // script parsed before Game.Init() has applied a preset.
             switch (name.ToLowerInvariant())
             {
-                case "left": return Kbd.SDLK_KP4;
-                case "right": return Kbd.SDLK_KP6;
-                case "up": return Kbd.SDLK_KP8;
-                case "down": return Kbd.SDLK_KP5;
-                case "fire": return Kbd.SDLK_PAGEDOWN;
-                case "jump": return Kbd.SDLK_DELETE;
-                case "use": return Kbd.SDLK_KP8;
-                case "next": return Kbd.SDLK_END;
-                case "prev": return Kbd.SDLK_HOME;
+                case "left": return Or(Controls.Get(DGame.Pl1, "left"), Kbd.SDLK_KP4);
+                case "right": return Or(Controls.Get(DGame.Pl1, "right"), Kbd.SDLK_KP6);
+                case "up": return Or(Controls.Get(DGame.Pl1, "up"), Kbd.SDLK_KP8);
+                case "down": return Or(Controls.Get(DGame.Pl1, "down"), Kbd.SDLK_KP5);
+                case "fire": return Or(Controls.Get(DGame.Pl1, "fire"), Kbd.SDLK_PAGEDOWN);
+                case "jump": return Or(Controls.Get(DGame.Pl1, "jump"), Kbd.SDLK_DELETE);
+                case "use": return Or(Controls.Get(DGame.Pl1, "use"), Kbd.SDLK_KP8);
+                case "next": return Or(Controls.Get(DGame.Pl1, "next"), Kbd.SDLK_END);
+                case "prev": return Or(Controls.Get(DGame.Pl1, "prev"), Kbd.SDLK_HOME);
                 case "space": return Kbd.SDLK_SPACE;
                 case "enter": return Kbd.SDLK_RETURN;
                 case "esc": return Kbd.SDLK_ESCAPE;
@@ -385,6 +579,11 @@ namespace DPTDOOM2D
                 case "n": return 'n';
                 default: return 0;
             }
+        }
+
+        private static int Or(int key, int fallback)
+        {
+            return key != 0 ? key : fallback;
         }
 
     }

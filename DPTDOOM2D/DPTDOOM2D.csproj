@@ -59,8 +59,14 @@
       refs/doom2d-rembo (see tools/fetch-data.ps1 for a fresh checkout).
     -->
     <None Include="..\refs\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\doom2d.wad')" />
-    <None Include="..\refs\doom2d-rembo\src\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\default.cfg')" />
     <None Include="..\refs\doom2d-rembo\music\*" Link="Data\Music\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\music')" />
+
+    <!--
+      Our default.cfg, not the upstream one: the original file pins all eighteen
+      keys to the 1996 numpad table, which would override the layout preset on
+      every start. Only the non-key settings are carried over - see the file.
+    -->
+    <None Update="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" />
 
     <!--
       The custom map library. These are the Deluxe-era community maps that ship

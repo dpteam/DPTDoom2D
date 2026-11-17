@@ -33,13 +33,19 @@ namespace DPTDOOM2D.Ui
     /// </summary>
     internal sealed class Overlay
     {
-        private static readonly string[] TabNames = { "Monitor", "Video", "Audio", "Game", "Log" };
+        private static readonly string[] TabNames = { "Monitor", "Video", "Audio", "Game", "Keys", "Log" };
 
         private readonly Win32Window window;
 
         public bool Visible;
         public int Tab;
         public int Row;
+
+        /// <summary>Player whose bindings the Keys tab edits: 1 or 2.</summary>
+        public int KeyPlayer = 1;
+
+        /// <summary>Row waiting for a key press, or -1. See <see cref="HandleKey"/>.</summary>
+        private int captureRow = -1;
 
         public int Scale = 2;
         public bool ShowFps = true;
@@ -62,7 +68,7 @@ namespace DPTDOOM2D.Ui
         public void Toggle()
         {
             Visible = !Visible;
-            if (!Visible) Row = 0;
+            if (!Visible) { Row = 0; captureRow = -1; }
         }
 
         public void AddLog(string line)
@@ -77,6 +83,7 @@ namespace DPTDOOM2D.Ui
         {
             Tab = (Tab + delta + TabNames.Length) % TabNames.Length;
             Row = 0;
+            captureRow = -1;
         }
 
         private int RowCount()
@@ -86,6 +93,7 @@ namespace DPTDOOM2D.Ui
                 case 1: return 5;   // Video
                 case 2: return 4;   // Audio
                 case 3: return 3;   // Game
+                case 4: return 2 + Controls.Actions.Length;   // Keys: layout, player, actions
                 default: return 0;
             }
         }
@@ -100,6 +108,15 @@ namespace DPTDOOM2D.Ui
             }
 
             if (!Visible) return false;
+
+            // The Keys tab waits for a key to bind: the next press is the answer,
+            // whatever it is. Escape abandons the capture instead of binding it.
+            if (captureRow >= 0)
+            {
+                if (sym != Kbd.SDLK_ESCAPE) BindKey(captureRow, sym);
+                captureRow = -1;
+                return true;
+            }
 
             switch (sym)
             {
@@ -205,7 +222,46 @@ namespace DPTDOOM2D.Ui
                     else if (Row == 1) Player.Fly = !Player.Fly;
                     else if (Row == 2) Player.Immortal = !Player.Immortal;
                     break;
+
+                case 4:
+                    if (Row == 0) CycleLayout();
+                    else if (Row == 1) KeyPlayer = KeyPlayer == 1 ? 2 : 1;
+                    else if (direction != 0) captureRow = Row;
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Switches between the two presets. There are only two, so either arrow
+        /// goes to the other one; the keys are reset, which is what a preset means.
+        /// </summary>
+        private void CycleLayout()
+        {
+            int preset = Controls.BasePreset;
+            Controls.Apply(preset == 1 ? 2 : 1);
+            AddLog("keys: layout " + Controls.PresetName(Controls.BasePreset));
+            SaveControls();
+        }
+
+        /// <summary>Binds the key that was just pressed to the row being captured.</summary>
+        private void BindKey(int row, int sym)
+        {
+            PlayerData p = KeyPlayer == 2 ? DGame.Pl2 : DGame.Pl1;
+            string action = Controls.Actions[row - 2];
+
+            Controls.Set(p, action, sym);
+            // BasePreset stays: these keys are preset N with an edit, and the launcher
+            // asking for preset N again must keep the edit rather than drop it.
+
+            AddLog("keys: " + (KeyPlayer == 2 ? "P2 " : "P1 ")
+                + Controls.ActionName(action) + " = " + Controls.KeyName(sym));
+            SaveControls();
+        }
+
+        private void SaveControls()
+        {
+            if (!Config.SaveControls())
+                AddLog("keys: could not write Storage/" + Config.CfgFile + " (read-only folder?)");
         }
 
         // ------------------------------------------------------------------ draw
@@ -302,16 +358,23 @@ namespace DPTDOOM2D.Ui
                 case 1: DrawVideo(dc, l, contentX, contentY, contentW, accent, text); break;
                 case 2: DrawAudio(dc, l, contentX, contentY, contentW, accent, text); break;
                 case 3: DrawGame(dc, l, contentX, contentY, contentW, accent, text); break;
-                case 4: DrawLog(dc, l, contentX, contentY, contentW, contentH, text); break;
+                case 4: DrawKeys(dc, l, contentX, contentY, contentW, contentH, accent, text); break;
+                case 5: DrawLog(dc, l, contentX, contentY, contentW, contentH, text); break;
             }
 
             // At 1x there is no room for the hint row; the tab strip and F2 are
             // the whole story anyway.
             if (l.Compact) return;
 
-            string hint = LocksInput
-                ? "TAB switch   arrows change   F2 close"
-                : "TAB switch   F2 close   (game input active)";
+            string hint;
+            if (Tab == 4 && captureRow >= 0)
+                hint = "press a key to bind it   ESC cancels";
+            else if (Tab == 4)
+                hint = "TAB switch   arrows change   Enter rebinds   F2 close";
+            else
+                hint = LocksInput
+                    ? "TAB switch   arrows change   F2 close"
+                    : "TAB switch   F2 close   (game input active)";
 
             window.DrawText(dc, hint, l.X + l.Pad, l.Y + l.Height - l.LineHeight - 6,
                 muted, false, l.SmallFont);
@@ -419,6 +482,47 @@ namespace DPTDOOM2D.Ui
             DrawRows(dc, l, x, y, width, labels, values, accent, text);
         }
 
+        /// <summary>
+        /// Keys tab: a layout preset, which player is being edited, then the nine
+        /// actions. The list scrolls when the panel is too short for all eleven rows
+        /// (the 1x window), always keeping the selected row on screen.
+        /// </summary>
+        private void DrawKeys(IntPtr dc, Layout l, int x, int y, int width, int height,
+            uint accent, uint text)
+        {
+            int count = 2 + Controls.Actions.Length;
+            string[] labels = new string[count];
+            string[] values = new string[count];
+
+            labels[0] = "Layout";
+            values[0] = Controls.PresetName(Controls.MatchPreset());
+
+            labels[1] = "Player";
+            values[1] = "P" + KeyPlayer;
+
+            PlayerData p = KeyPlayer == 2 ? DGame.Pl2 : DGame.Pl1;
+            for (int i = 0; i < Controls.Actions.Length; ++i)
+            {
+                labels[2 + i] = Controls.ActionName(Controls.Actions[i]);
+                values[2 + i] = Controls.KeyName(Controls.Get(p, Controls.Actions[i]));
+            }
+
+            if (captureRow >= 0) values[captureRow] = "<press a key>";
+
+            int lineHeight = l.LineHeight + 4;
+            int visible = Math.Max(1, height / lineHeight);
+            int first = Row >= visible ? Row - visible + 1 : 0;
+            if (first + visible > count) first = Math.Max(0, count - visible);
+
+            int shown = Math.Min(visible, count - first);
+            string[] visibleLabels = new string[shown];
+            string[] visibleValues = new string[shown];
+            Array.Copy(labels, first, visibleLabels, 0, shown);
+            Array.Copy(values, first, visibleValues, 0, shown);
+
+            DrawRowsWindow(dc, l, x, y, width, visibleLabels, visibleValues, accent, text, first);
+        }
+
         private void DrawLog(IntPtr dc, Layout l, int x, int y, int width, int height, uint text)
         {
             if (logLines.Count == 0)
@@ -460,9 +564,20 @@ namespace DPTDOOM2D.Ui
         private void DrawRows(IntPtr dc, Layout l, int x, int y, int width,
             string[] labels, string[] values, uint accent, uint text)
         {
+            DrawRowsWindow(dc, l, x, y, width, labels, values, accent, text, 0);
+        }
+
+        /// <summary>
+        /// Same, but the first entry stands for row <paramref name="firstRow"/> of the
+        /// full list: the Keys tab scrolls, and the highlight has to follow the real
+        /// row number rather than the position on screen.
+        /// </summary>
+        private void DrawRowsWindow(IntPtr dc, Layout l, int x, int y, int width,
+            string[] labels, string[] values, uint accent, uint text, int firstRow)
+        {
             for (int i = 0; i < labels.Length; ++i)
             {
-                bool selected = i == Row;
+                bool selected = firstRow + i == Row;
                 int lineY = y + i * (l.LineHeight + 4);
 
                 if (selected)

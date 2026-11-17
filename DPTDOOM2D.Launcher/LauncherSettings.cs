@@ -33,6 +33,12 @@ namespace DPTDOOM2D.Launcher
         public string Stretch = "near";
         public bool Fullscreen;
 
+        /// <summary>
+        /// "" = whatever the game remembers (the launcher does not touch the keys);
+        /// "1" or "2" = reset to that layout preset. See docs/CONTROLS.md.
+        /// </summary>
+        public string Layout = "";
+
         public int Port = 5041;
         public string Password = "";
         public string Master = "play.dartpower.xyz:25145";
@@ -90,6 +96,7 @@ namespace DPTDOOM2D.Launcher
                         case "scale": settings.Scale = ParseInt(value, 2); break;
                         case "stretch": settings.Stretch = value; break;
                         case "fullscreen": settings.Fullscreen = ParseBool(value); break;
+                        case "layout": settings.Layout = value; break;
                         case "port": settings.Port = ParseInt(value, 5041); break;
                         case "password": settings.Password = value; break;
                         case "master": settings.Master = value; break;
@@ -126,6 +133,7 @@ namespace DPTDOOM2D.Launcher
                 text.AppendLine("scale=" + Scale);
                 text.AppendLine("stretch=" + Stretch);
                 text.AppendLine("fullscreen=" + (Fullscreen ? "on" : "off"));
+                text.AppendLine("layout=" + Layout);
                 text.AppendLine("port=" + Port);
                 text.AppendLine("password=" + Password);
                 text.AppendLine("master=" + Master);
@@ -169,7 +177,8 @@ namespace DPTDOOM2D.Launcher
                 RelaySession,
                 Address,
                 PlayerName,
-                string.Join("|", Mods.ToArray())
+                string.Join("|", Mods.ToArray()),
+                Layout
             });
         }
 
@@ -200,6 +209,8 @@ namespace DPTDOOM2D.Launcher
                 foreach (string mod in parts[13].Split('|'))
                     if (mod.Length > 0) Mods.Add(mod);
             }
+
+            if (parts.Length > 14) Layout = parts[14];
         }
 
         // ---- command line ----------------------------------------------------
@@ -213,6 +224,11 @@ namespace DPTDOOM2D.Launcher
 
             if (!string.IsNullOrEmpty(Stretch)) builder.Append("-stretch ").Append(Stretch).Append(' ');
             if (Fullscreen) builder.Append("-fullscr ");
+
+            // Only an explicit preset is passed. Without one the game keeps the keys
+            // saved by the F2 overlay, so rebinding a key is not undone by the next
+            // launch from the launcher.
+            if (Layout == "1" || Layout == "2") builder.Append("-layout ").Append(Layout).Append(' ');
 
             if (!string.IsNullOrEmpty(MapPack))
                 builder.Append("-map-pack ").Append(Quote(MapPack)).Append(' ');

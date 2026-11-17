@@ -64,6 +64,14 @@ Lockstep: both machines run the same world from the same RNG seed; only input
 crosses the wire, plus a world checksum so a desync is reported instead of
 silently drifting.
 
+## Controls
+
+Two layouts, the way an emulator offers input presets: **1 — arrows + `Z`/`X`**
+(default, fire on `Z`, jump on `X`) and **2 — the 1996 numpad table** from
+`main.c`. Switch with `F2` → **Keys**, with the launcher's layout field, or with
+`-layout 2`; any single key can be rebound on that same tab and is saved to
+`Storage/default.cfg`.
+
 ## Documentation
 
 Russian, in `docs/`:

@@ -152,6 +152,12 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  cheats FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  cheats ok' -ForegroundColor DarkGray }
 
+		# Layout presets: the keys, and the KeyName -> KeyByName round trip the
+		# overlay relies on when it saves a rebind.
+		& $exe --controls 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  controls FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  controls ok' -ForegroundColor DarkGray }
+
 		# Mod kit: build a PK3 out of a map pack, list it, and load it back. This is
 		# the whole mod workflow in one round trip.
 		$modSrc = Join-Path $tmp 'modsrc'
@@ -226,13 +232,17 @@ try
 		Copy-Item (Join-Path $output 'dptdoom2d.exe.config') $dist
 		Copy-Item $launcher $dist
 		Copy-Item $master $dist
-		Copy-Item (Join-Path $output 'DPTDOOM2D.Shared.dll') $dist -ErrorAction SilentlyContinue
 		Copy-Item (Join-Path $output 'Data') (Join-Path $dist 'Data') -Recurse
 
 		# GPLv2 requires the license to travel with the binaries.
 		Copy-Item (Join-Path $root '..\LICENSE') $dist
 		Copy-Item (Join-Path $root '..\README.md') $dist
 		Copy-Item (Join-Path $root '..\CHANGELOG.md') $dist
+
+		# Double-clickable entry points. The exes work on their own, but a game
+		# folder is used by people who do not read docs: a master that needs
+		# "--bind 0.0.0.0 --port 25145" might as well not have a button at all.
+		Copy-Item (Join-Path $root 'tools\bat\*') $dist -ErrorAction SilentlyContinue
 
 		Write-Host "   $dist" -ForegroundColor Green
 

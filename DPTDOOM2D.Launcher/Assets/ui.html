@@ -111,6 +111,17 @@
             <input id="playerName" type="text" maxlength="31" spellcheck="false" placeholder="Player">
           </label>
 
+          <label>Раскладка управления
+            <select id="layout">
+              <option value="" selected>как в игре — свои привязки</option>
+              <option value="1">1 — стрелки + Z/X</option>
+              <option value="2">2 — numpad (1996)</option>
+            </select>
+          </label>
+          <p class="hint">Шаблон задаёт все клавиши сразу, поэтому выбор шаблона
+            сбрасывает свои привязки. Отдельную клавишу можно поменять в игре:
+            <b>F2</b> → вкладка <b>Keys</b>, Enter на строке и нажать новую клавишу.</p>
+
           <div id="network" class="hidden">
             <label>Порт
               <input id="port" type="number" min="1024" max="65535" value="5041">

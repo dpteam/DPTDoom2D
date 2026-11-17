@@ -259,27 +259,12 @@ namespace DPTDOOM2D.Game
 
             Menu.Init();
 
-            // main.c: the default bindings, applied before the config file is read.
-            Pl1.Ku = Kbd.SDLK_KP8;
-            Pl1.Kd = Kbd.SDLK_KP5;
-            Pl1.Kl = Kbd.SDLK_KP4;
-            Pl1.Kr = Kbd.SDLK_KP6;
-            Pl1.Kf = Kbd.SDLK_PAGEDOWN;
-            Pl1.Kj = Kbd.SDLK_DELETE;
-            Pl1.Kwl = Kbd.SDLK_HOME;
-            Pl1.Kwr = Kbd.SDLK_END;
-            Pl1.Kp = Kbd.SDLK_KP8;
-            Pl1.Id = -1;
+            // main.c used to hard-code its numpad table here. The keys now come
+            // from a named preset (Controls), applied before the config file is
+            // read so that saved bindings can still override it.
+            Controls.Apply(Controls.DefaultPreset);
 
-            Pl2.Ku = 'e';
-            Pl2.Kd = 'd';
-            Pl2.Kl = 's';
-            Pl2.Kr = 'f';
-            Pl2.Kf = 'a';
-            Pl2.Kj = 'q';
-            Pl2.Kwl = '1';
-            Pl2.Kwr = '2';
-            Pl2.Kp = 'e';
+            Pl1.Id = -1;
             Pl2.Id = -2;
 
             Pl1.Color = 0x70;

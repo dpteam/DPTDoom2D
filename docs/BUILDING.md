@@ -91,6 +91,7 @@ dptdoom2d.exe --walls <карта>
 dptdoom2d.exe --music <трек>
 dptdoom2d.exe --sounds
 dptdoom2d.exe --cheats
+dptdoom2d.exe --controls
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
@@ -105,8 +106,9 @@ dptdoom2d.exe --list
 ```
 
 Скрипт клавиш: `тик:клавиша`, через запятую; `тик:-клавиша` отпускает клавишу.
-Имена: `left right up down fire jump use next prev space enter esc y n`
-(это привязки по умолчанию из `main.c`, не стрелки).
+Имена: `left right up down fire jump use next prev space enter esc y n`.
+Действия берутся из текущей раскладки (шаблон 1 по умолчанию), поэтому
+`40:fire` — это `Z`, а не `Page Down` (см. [CONTROLS.md](CONTROLS.md)).
 
 Пример: пройти вправо, выстрелить на 40-м тике и посмотреть кадр на 300-м.
 
