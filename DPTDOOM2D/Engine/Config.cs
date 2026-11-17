@@ -134,6 +134,7 @@ namespace DPTDOOM2D.Engine
             AddSwitch("cheat", null, v => Cheat = v);
             AddSwitch("vga", "screenshot", v => ScreenshotEnabled = v);
             AddNumber("sndvol", "sound_volume", v => Sound.SndVol = v);
+            AddSwitch("nosound", null, v => AudioSystem.Disabled = v);
             AddNumber("musvol", "music_volume", v => Music.MusVol = v);
             AddSwitch("fullscr", "fullscreen", v => Fullscreen = v);
             AddSwitch("window", null, v => Fullscreen = !v);

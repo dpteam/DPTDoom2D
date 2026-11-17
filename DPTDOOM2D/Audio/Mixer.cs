@@ -31,6 +31,20 @@ namespace DPTDOOM2D.Audio
             public int LoopLength;
             public bool Loop;
             public bool Active;
+
+            /// <summary>
+            /// Bumped every time the channel is restarted.
+            ///
+            /// The mixer renders on the audio thread while the game calls Play from
+            /// the game thread. A restart that lands while the mixer is inside this
+            /// channel would be undone: the mixer writes back the position it read at
+            /// the top of the buffer, so the new sound starts from wherever the old one
+            /// had got to. The audible result is the same sound heard twice — a
+            /// fragment of it, then the whole thing. Comparing the generation before
+            /// writing the position back makes a restart win, without a lock in the
+            /// mixer's inner loop.
+            /// </summary>
+            public int Generation;
         }
 
         private readonly Channel[] channels = new Channel[MaxChannels];
@@ -57,8 +71,17 @@ namespace DPTDOOM2D.Audio
         public int FindFreeChannel()
         {
             for (int i = 0; i < MaxChannels; ++i) if (!channels[i].Active) return i;
-            return 0;
+
+            // Everything is busy: take the next one in rotation rather than always
+            // channel 0. Always stealing 0 meant the same channel was cut every time a
+            // seventeenth sound arrived, which is heard as a sound stuttering or
+            // starting twice.
+            int chosen = stealAt;
+            stealAt = (stealAt + 1) % MaxChannels;
+            return chosen;
         }
+
+        private int stealAt;
 
         public void StopAll()
         {
@@ -97,19 +120,33 @@ namespace DPTDOOM2D.Audio
 
         private static void MixChannel(Channel channel, float[] destination, int frames)
         {
+            // Everything is copied out once: the game thread can restart this channel
+            // at any moment, and reading Length after Data was swapped would index off
+            // the end. A restart during this buffer invalidates the position written
+            // back at the end, which is what the generation check is for.
+            int generation = channel.Generation;
+
+            sbyte[] data = channel.Data;
+            int length = channel.Length;
+            int loopStart = channel.LoopStart;
+            int loopLength = channel.LoopLength;
+            bool loop = channel.Loop;
+
+            if (data == null || length <= 0 || length > data.Length) return;
+
             double step = (double)channel.Rate / AudioOut.SampleRate;
             double position = channel.Position;
             float volume = channel.Volume;
 
             for (int frame = 0; frame < frames; ++frame)
             {
-                if (position >= channel.Length)
+                if (position >= length)
                 {
-                    if (channel.Loop && channel.LoopLength > 0)
+                    if (loop && loopLength > 0)
                     {
                         // Wrap inside the loop region the lump declared.
-                        double over = position - channel.LoopStart;
-                        position = channel.LoopStart + (over % channel.LoopLength);
+                        double over = position - loopStart;
+                        position = loopStart + (over % loopLength);
                     }
                     else
                     {
@@ -121,11 +158,11 @@ namespace DPTDOOM2D.Audio
 
                 int index = (int)position;
                 int next = index + 1;
-                if (next >= channel.Length) next = channel.Loop && channel.LoopLength > 0 ? channel.LoopStart : index;
+                if (next >= length) next = loop && loopLength > 0 ? loopStart : index;
 
                 float fraction = (float)(position - index);
-                float sample = channel.Data[index] / 128f;
-                if (next != index) sample += (channel.Data[next] / 128f - sample) * fraction;
+                float sample = data[index] / 128f;
+                if (next != index) sample += (data[next] / 128f - sample) * fraction;
 
                 int at = frame * AudioOut.Channels;
                 destination[at] += sample * volume;
@@ -134,7 +171,7 @@ namespace DPTDOOM2D.Audio
                 position += step;
             }
 
-            channel.Position = position;
+            if (channel.Generation == generation) channel.Position = position;
         }
     }
 }

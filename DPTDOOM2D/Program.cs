@@ -123,6 +123,11 @@ namespace DPTDOOM2D
                     return Headless.MusicConvertCheck();
                 if (args[i] == "--sndcheck")
                     return Headless.SoundConvertCheck();
+                if (args[i] == "--fonttest" && i + 1 < args.Length)
+                {
+                    Boot();
+                    return Headless.FontTest(args[i + 1]);
+                }
                 if (args[i] == "--mapcheck")
                 {
                     Boot();

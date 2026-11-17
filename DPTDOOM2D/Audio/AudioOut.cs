@@ -61,6 +61,18 @@ namespace DPTDOOM2D.Audio
         {
             if (waveOut != IntPtr.Zero) return true;
 
+            // Ask first, open second. On a machine with no audio device — a CI
+            // container, a server session, a Windows install with the audio service
+            // disabled — waveOutOpen can sit for five seconds before failing, and that
+            // delay lands on the game's startup for a feature that was never going to
+            // work. waveOutGetNumDevs answers the same question instantly.
+            int devices = waveOutGetNumDevs();
+            if (devices <= 0)
+            {
+                Log.Warn("audio: no output device, running without sound");
+                return false;
+            }
+
             var format = new WAVEFORMATEX();
             format.wFormatTag = 1;                       // PCM
             format.nChannels = Channels;
@@ -258,7 +270,7 @@ namespace DPTDOOM2D.Audio
         }
 
         [DllImport("winmm.dll")] private static extern int waveOutOpen(out IntPtr handle, int device, ref WAVEFORMATEX format, IntPtr callback, IntPtr instance, uint flags);
-        [DllImport("winmm.dll")] private static extern int waveOutClose(IntPtr handle);
+        [DllImport("winmm.dll")] private static extern int waveOutGetNumDevs();        [DllImport("winmm.dll")] private static extern int waveOutClose(IntPtr handle);
         [DllImport("winmm.dll")] private static extern int waveOutPrepareHeader(IntPtr handle, IntPtr header, int size);
         [DllImport("winmm.dll")] private static extern int waveOutUnprepareHeader(IntPtr handle, IntPtr header, int size);
         [DllImport("winmm.dll")] private static extern int waveOutWrite(IntPtr handle, IntPtr header, int size);

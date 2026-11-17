@@ -29,6 +29,7 @@ namespace DPTDOOM2D.Editor
         {
             try
             {
+                ParseOptions(args);
                 Boot();
 
                 // --render <map> <out.png>: the map without a window. It is how the
@@ -36,6 +37,13 @@ namespace DPTDOOM2D.Editor
                 // obvious in a picture and invisible in a log.
                 if (args.Length >= 3 && args[0] == "--render")
                     return RenderToFile(args[1], args[2]);
+
+                // --shot <map> <out.bmp> [tab]: the whole editor screen without a
+                // window, one frame at 320x200. The reference screenshots came out
+                // of DOSBox, so the only way to compare them is with a picture that
+                // has no window chrome and no scaling in it.
+                if (args.Length >= 3 && args[0] == "--shot")
+                    return ScreenToFile(args[1], args[2], args.Length > 3 ? args[3] : "0");
 
                 // --save <map> <out.wad>: the editor's save path without the window.
                 // It is the check that a map written here loads in the game.
@@ -50,7 +58,7 @@ namespace DPTDOOM2D.Editor
                 if (args.Length >= 1 && args[0] == "--undocheck")
                     return UndoCheck();
 
-                string open = args.Length > 0 ? args[0] : null;
+                string open = Open;
                 return Run(open);
             }
             catch (Fatal e)
@@ -90,7 +98,13 @@ namespace DPTDOOM2D.Editor
             Wad.AddWad(Path.Combine(DataDirectory, "doom2d.wad"));
             Wad.InitWads();
             Palette.Load();
-            Palette.SetGamma(0);
+
+            // The DOS editor shipped with `gamma=1` in EDITOR.CFG and called
+            // setgamma(gamma) at startup, so its greys are the brighter ramp, not
+            // the raw palette. Rendering at 0 makes every widget visibly darker
+            // than the reference screenshots — the panel face comes out 96 instead
+            // of 116 — which is exactly how this was found.
+            Palette.SetGamma(Gamma);
 
             // Actor data decides monster names and sprites; the editor shows both.
             Actors.Load();
@@ -149,30 +163,122 @@ namespace DPTDOOM2D.Editor
             return null;
         }
 
-        /// <summary>The editor's own loop: input, draw, present. Twenty frames a second.</summary>
+        /// <summary>
+        /// Brightness, as the original's EDITOR.CFG carried it. 1 is what the 1996
+        /// editor shipped with and what its screenshots show.
+        /// </summary>
+        private static int Gamma = 1;
+
+        /// <summary>The map to open, from the first argument that is not a switch.</summary>
+        private static string Open;
+
+        /// <summary>The name the map gets in the saved WAD, set when it is read.</summary>
+        private static string OpenName = "MAP01";
+
+        /// <summary>Window scale: 1..6, or 0 to fit. Same meaning as the game's -scale.</summary>
+        private static int Scale = 3;
+
+        private static bool Fullscreen;
+
+        private static Win32Window.StretchMode Stretch = Win32Window.StretchMode.Nearest;
+
+        /// <summary>
+        /// The same two options the game takes, so the editor can be stretched the
+        /// same way. Parsed here rather than through Engine/Config: that file drags in
+        /// the whole game configuration, and the editor needs two numbers.
+        /// </summary>
+        private static void ParseOptions(string[] args)
+        {
+            for (int i = 0; i < args.Length; ++i)
+            {
+                string s = args[i];
+
+                if (s.Length < 2 || (s[0] != '-' && s[0] != '/'))
+                {
+                    // A map or a file, not a switch. Taking args[0] blindly made
+                    // `-scale 2` open a map called "-SCALE" and save the level under
+                    // that name — which the game then could not find.
+                    if (Open == null) Open = s;
+                    continue;
+                }
+
+                string name = s.Substring(1).ToLowerInvariant();
+
+                if (name == "fullscr" || name == "fullscreen")
+                {
+                    Fullscreen = true;
+                    continue;
+                }
+
+                if (name == "window")
+                {
+                    Fullscreen = false;
+                    continue;
+                }
+
+                if (i + 1 >= args.Length) continue;
+
+                string value = args[++i];
+
+                if (name == "scale")
+                {
+                    int scale;
+                    if (int.TryParse(value, out scale))
+                        Scale = scale < 0 ? 0 : (scale > 6 ? 6 : scale);
+                }
+                else if (name == "gamma")
+                {
+                    int gamma;
+                    if (int.TryParse(value, out gamma))
+                        Gamma = gamma < 0 ? 0 : (gamma > 4 ? 4 : gamma);
+                }
+                else if (name == "stretch")
+                {
+                    switch (value.Trim().ToLowerInvariant())
+                    {
+                        case "pixel":
+                        case "pixelperfect":
+                        case "pixel-perfect":
+                            Stretch = Win32Window.StretchMode.PixelPerfect;
+                            break;
+
+                        case "smooth":
+                        case "linear":
+                            Stretch = Win32Window.StretchMode.Smooth;
+                            break;
+
+                        default:
+                            Stretch = Win32Window.StretchMode.Nearest;
+                            break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The editor's loop: input, draw, present — the same shape as the game's.
+        ///
+        /// The window is a scaled view of one 320x200 frame, exactly like the game, so
+        /// -scale and -stretch mean the same thing here. That is the point of drawing
+        /// the whole UI into the framebuffer: at 1x and at 6x it is the same picture,
+        /// and "stretch it like the game" needs no code of its own.
+        /// </summary>
         private static int Run(string open)
         {
             Vga.Init(EditorScreen.ScreenW, EditorScreen.ScreenH);
             Vga.SetRect(0, EditorScreen.ScreenW, 0, EditorScreen.ScreenH);
 
+            EditorSkin.Load();
+
             var screen = new EditorScreen();
-            screen.Load(InitialMap(open), NameOf(open), "");
+            screen.Load(InitialMap(open), OpenName, "");
 
             var window = new Win32Window("DPT.DOOM 2D — редактор карт",
-                EditorScreen.ScreenW, EditorScreen.ScreenH, 3, false);
+                EditorScreen.ScreenW, EditorScreen.ScreenH, Scale, Fullscreen);
 
-            // Pixel perfect: the map is drawn at 16 pixels a cell and the whole
-            // point is that a wall looks like the wall. Stretching would smear it.
-            window.Stretch = Win32Window.StretchMode.PixelPerfect;
+            window.Stretch = Stretch;
 
-            var ui = new EditorUi(window);
             var presenter = new Presenter(EditorScreen.ScreenW, EditorScreen.ScreenH);
-
-            window.OverlayPainter = delegate (IntPtr dc, int width, int height)
-            {
-                try { ui.Draw(dc, screen); }
-                catch (Exception e) { Log.Error("editor: ui draw failed", e); }
-            };
 
             while (!window.Closed && !screen.Quit)
             {
@@ -200,17 +306,23 @@ namespace DPTDOOM2D.Editor
                 if (File.Exists(open))
                 {
                     byte[] data = File.ReadAllBytes(open);
-                    return MapFile.Read(data, Path.GetFileName(open));
+                    OpenName = NameOf(open);
+                    return MapFile.Read(data, OpenName);
                 }
 
                 int res = Wad.FindRes(open);
-                if (res >= 0) return MapFile.Read(Wad.LoadRes(res), open);
+                if (res >= 0)
+                {
+                    OpenName = open.ToUpperInvariant();
+                    return MapFile.Read(Wad.LoadRes(res), OpenName);
+                }
             }
 
             int map01 = Wad.FindRes("MAP01");
             if (map01 < 0)
                 throw new Fatal("В WAD нет карты MAP01");
 
+            OpenName = "MAP01";
             return MapFile.Read(Wad.LoadRes(map01), "MAP01");
         }
 
@@ -333,9 +445,50 @@ namespace DPTDOOM2D.Editor
             return 0;
         }
 
-        /// <summary>Renders a whole map to a PNG through the editor's canvas.</summary>
-        private static int RenderToFile(string mapName, string output)
+        /// <summary>
+        /// Renders one editor frame to a BMP.
+        ///
+        /// This is the editor's picture without a window: 320x200, no scaling, no
+        /// title bar. The reference screenshots in docs/images came out of DOSBox,
+        /// so comparing against them means comparing pictures with the same
+        /// properties — and a pixel-by-pixel diff is only possible this way.
+        /// </summary>
+        private static int ScreenToFile(string mapName, string output, string tab)
         {
+            int res = Wad.FindRes(mapName);
+            if (res < 0)
+            {
+                Console.Error.WriteLine("shot: карта " + mapName + " не найдена");
+                return 1;
+            }
+
+            MapFile map = MapFile.Read(Wad.LoadRes(res), mapName);
+
+            Vga.Init(EditorScreen.ScreenW, EditorScreen.ScreenH);
+            Vga.SetRect(0, EditorScreen.ScreenW, 0, EditorScreen.ScreenH);
+
+            EditorSkin.Load();
+
+            var screen = new EditorScreen();
+            screen.Load(map, mapName, "");
+
+            int tool;
+            if (int.TryParse(tab, out tool) && tool >= 0 && tool < 5)
+                screen.Tool = (EditorTool)tool;
+
+            // One frame, drawn exactly as the loop draws it. Draw needs a window only
+            // for the mouse position, and a headless run has no mouse.
+            screen.Draw(null);
+
+            MapCanvas.WriteBmp(output, EditorScreen.ScreenW, EditorScreen.ScreenH);
+
+            Console.WriteLine("shot: " + mapName + " tab " + screen.Tool + " -> " + Path.GetFileName(output));
+
+            return 0;
+        }
+
+        /// <summary>Renders a whole map to a PNG through the editor's canvas.</summary>
+        private static int RenderToFile(string mapName, string output)        {
             int res = Wad.FindRes(mapName);
             if (res < 0)
             {
@@ -352,7 +505,11 @@ namespace DPTDOOM2D.Editor
             Vga.SetRect(0, width, 0, height);
             Vga.Clr(0, width, 0, height, 0);
 
-            MapCanvas.Draw(map, 0, 0, 0, 0, width, height, true, true, true);
+            // A whole level, so the camera sits at its centre with nothing to clip.
+            MapCanvas.Draw(map, width / 2, height / 2,
+                0, 0, width, height,
+                true, true, true, true, true, -1, -1, false, 0, 0, 0, 0);
+
             MapCanvas.WriteBmp(output, width, height);
 
             Console.WriteLine("render: " + mapName + " -> " + Path.GetFileName(output)

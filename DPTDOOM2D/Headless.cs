@@ -1277,6 +1277,49 @@ namespace DPTDOOM2D
             return data.ToArray();
         }
 
+        /// <summary>
+        /// --fonttest &lt;out.bmp&gt;: draws a sample of the WAD font.
+        ///
+        /// The editor renders its own text and has to know what the glyphs in this
+        /// WAD actually look like. Guessing from the bytes gave a wrong answer once
+        /// already, so the check is a picture: this is the same font the game's menu
+        /// uses, drawn by the same function.
+        /// </summary>
+        public static int FontTest(string output)
+        {
+            Vga.Init(320, 200);
+            Vga.SetRect(0, 320, 0, 200);
+            Vga.Clr(0, 320, 0, 200, 0);
+
+            Misc.InitSt();
+
+            // Small font: what the game's menu and the editor's labels use.
+            Misc.Gotoxy(4, 4);
+            Misc.PrintSf("ABCDEFGHIJ");
+
+            Misc.Gotoxy(4, 16);
+            Misc.PrintSf("0123456789");
+
+            // The Cyrillic range the DOS editor relied on, CP866 128..159.
+            Misc.Gotoxy(4, 28);
+            Misc.PrintSf("\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89");
+
+            Misc.Gotoxy(4, 40);
+            Misc.PrintSf("\x8A\x8B\x8C\x8D\x8E\x8F\x90\x91\x92\x93");
+
+            // Big font, for comparison.
+            Misc.Gotoxy(4, 56);
+            Misc.PrintBf("ABCDE");
+
+            Misc.Gotoxy(4, 76);
+            Misc.PrintBf("12345");
+
+            Program.WriteBmp(output, 320, 200);
+
+            Console.WriteLine("fonttest: " + System.IO.Path.GetFileName(output));
+            return 0;
+        }
+
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
         private static bool Type(string text)
         {

@@ -35,6 +35,7 @@
     <Compile Include="..\DPTDOOM2D\Engine\ResourceAudit.cs" Link="Engine\ResourceAudit.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Vga.cs" Link="Engine\Vga.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\VgaImage.cs" Link="Engine\VgaImage.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\VgaContainer.cs" Link="Engine\VgaContainer.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Palette.cs" Link="Engine\Palette.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Res.cs" Link="Engine\Res.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Bin.cs" Link="Engine\Bin.cs" />
@@ -60,6 +61,15 @@
   <ItemGroup>
     <None Include="..\DPTDOOM2D\Data\default.cfg" Link="Data\default.cfg" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\DPTDOOM2D\Data\default.cfg')" />
     <None Include="..\refs\doom2d-rembo\src\doom2d.wad" Link="Data\doom2d.wad" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\refs\doom2d-rembo\src\doom2d.wad')" />
+  </ItemGroup>
+
+  <!--
+    gamma.dat is the brightness table Palette.SetGamma needs. The game embeds it;
+    the editor has to as well, or the curves stay identity and -gamma does nothing —
+    which showed up as every widget being darker than the DOS screenshots.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\refs\doom2d-rembo\src\gamma.dat" Link="Data\gamma.dat" LogicalName="DPTDOOM2D.gamma.dat" Condition="Exists('..\refs\doom2d-rembo\src\gamma.dat')" />
   </ItemGroup>
 
 </Project>

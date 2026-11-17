@@ -98,6 +98,7 @@ dptdoom2d.exe --mapcheck
 dptdoom2d.exe --mapsave <map> <out.wad>
 dptdoom2d-editor.exe --save <map> <out.wad>
 dptdoom2d-editor.exe --render <map> <out.bmp>
+dptdoom2d-editor.exe --shot <map> <out.bmp> [tab]
 dptdoom2d.exe --netdata <master>
 dptdoom2d.exe --wadreq [candidate.wad]
 dptdoom2d.exe --muscheck

@@ -12,86 +12,162 @@ using DPTDOOM2D.Game;
 namespace DPTDOOM2D.Editor
 {
     /// <summary>
-    /// Draws a map region into the 8-bit framebuffer with the game's own textures
-    /// and sprites.
+    /// Draws the level the way the DOS editor did, through W_draw.
     ///
-    /// The original DOS editor did exactly this: it loaded the same WAD and called
-    /// Z_drawfld, so the level looked like the level while it was being built. The
-    /// only layer the game never draws is the collision map, which is shown as a
-    /// stipple on top — a mapper still has to see where a wall blocks movement.
+    /// The numbers are the original's: a cell is 8x8 pixels (CELW/CELH in VIEW.H),
+    /// the view is 200x98 at the top-left of the screen, and the level is always
+    /// 100x100 cells. The camera is the original's (w_x, w_y) — the *centre* of the
+    /// view in map pixels, not its corner — because that is what the scroll bars and
+    /// the mouse handlers both speak.
+    ///
+    /// Layer order is the original's too, and it matters: back walls, then things,
+    /// then front walls, then cell types, then switches. A thing standing on a front
+    /// wall is hidden by it, and a type marker sits on top of everything.
     /// </summary>
     internal static class MapCanvas
     {
-        /// <summary>One map cell is 16x16 pixels, as in the engine.</summary>
-        public const int CellSize = 16;
+        /// <summary>One cell is 8x8 pixels: CELW and CELH from VIEW.H.</summary>
+        public const int CellSize = 8;
+
+        /// <summary>The level is always 100x100 cells: FLDW and FLDH.</summary>
+        public const int FieldWidth = 100, FieldHeight = 100;
+
+        /// <summary>Map pixels, not cells: FLDW*CELW.</summary>
+        public const int MapWidth = FieldWidth * CellSize;
+        public const int MapHeight = FieldHeight * CellSize;
+
+        /// <summary>WD/2 and HT/2 from VIEW.CPP: half the 200x98 view.</summary>
+        public const int ViewHalfW = 100, ViewHalfH = 49;
+
+        /// <summary>MAXX-WD/2 and MAXY-HT/2, the divisors W_draw divides by.</summary>
+        private const int SkyRangeX = MapWidth - ViewHalfW * 2;
+        private const int SkyRangeY = MapHeight - ViewHalfH * 2;
+
+        /// <summary>
+        /// The type layer's colours, tctab from MISCA.ASM.
+        ///
+        /// One entry per cell type, drawn as a 4x4 block inset by two pixels — small
+        /// enough to leave the texture under it readable, big enough to see.
+        /// </summary>
+        private static readonly byte[] TypeTable =
+        {
+            0x00, 0x54, 0xA2, 0x72, 0x60, 0xC8, 0xDC, 0xD6, 0xFB, 0x48, 0x98
+        };
 
         private static readonly Dictionary<int, VgaImage> textures = new Dictionary<int, VgaImage>();
 
+        private static VgaImage sky;
+        private static int skyType = -1;
+
         /// <summary>
-        /// Draws the map through a camera into a rectangle of the framebuffer.
+        /// Draws the level into a viewport.
         ///
-        /// <paramref name="camX"/>/<paramref name="camY"/> are the map pixel that
-        /// appears at the top-left of the viewport.
+        /// <paramref name="wX"/>/<paramref name="wY"/> are the camera centre in map
+        /// pixels, exactly like the original's globals of the same name. The viewport
+        /// is normally 200x98 at (0,1); the whole-level render uses the full map.
         /// </summary>
-        public static void Draw(MapFile map, int camX, int camY,
+        public static void Draw(MapFile map, int wX, int wY,
             int viewX, int viewY, int viewW, int viewH,
-            bool showBack, bool showFront, bool showTypes)
+            bool showBack, bool showFront, bool showTypes, bool showThings, bool showSwitch,
+            int selectedThing, int selectedSwitch,
+            bool dragging, int dragX1, int dragY1, int dragX2, int dragY2)
         {
             Vga.SetRect(viewX, viewW, viewY, viewH);
 
-            for (int y = 0; y < MapFile.Height; ++y)
-            {
-                for (int x = 0; x < MapFile.Width; ++x)
-                {
-                    int at = y * MapFile.Width + x;
-                    int px = x * CellSize - camX + viewX;
-                    int py = y * CellSize - camY + viewY;
+            int halfW = viewW / 2;
+            int halfH = viewH / 2;
 
-                    if (px > viewX + viewW || py > viewY + viewH) continue;
-                    if (px + CellSize < viewX || py + CellSize < viewY) continue;
+            DrawSky(map, wX, wY, viewX, viewY);
 
-                    if (showBack) DrawWall(map, map.Back[at], px, py);
-                }
-            }
+            if (showBack) DrawField(map, map.Back, wX, wY, viewX + halfW, viewY + halfH, viewW, viewH);
+            if (showThings) DrawThings(map, wX, wY, viewX + halfW, viewY + halfH, selectedThing);
+            if (showFront) DrawField(map, map.Front, wX, wY, viewX + halfW, viewY + halfH, viewW, viewH);
+            if (showTypes) DrawTypes(map, wX, wY, viewX + halfW, viewY + halfH, viewW, viewH);
+            if (showSwitch) DrawSwitches(map, wX, wY, viewX + halfW, viewY + halfH, selectedSwitch);
 
-            DrawThings(map, camX, camY, viewX, viewY, viewW, viewH);
-
-            if (showFront)
-            {
-                for (int y = 0; y < MapFile.Height; ++y)
-                {
-                    for (int x = 0; x < MapFile.Width; ++x)
-                    {
-                        int at = y * MapFile.Width + x;
-                        int px = x * CellSize - camX + viewX;
-                        int py = y * CellSize - camY + viewY;
-
-                        if (px > viewX + viewW || py > viewY + viewH) continue;
-                        if (px + CellSize < viewX || py + CellSize < viewY) continue;
-
-                        DrawWall(map, map.Front[at], px, py);
-                    }
-                }
-            }
-
-            if (showTypes) DrawTypes(map, camX, camY, viewX, viewY, viewW, viewH);
+            if (dragging)
+                DrawSelection(dragX1, dragY1, dragX2, dragY2, wX, wY, viewX + halfW, viewY + halfH, viewW, viewH);
 
             Vga.SetRect(0, Vga.SCRW, 0, Vga.SCRH);
         }
 
-        private static void DrawWall(MapFile map, int index, int px, int py)
+        /// <summary>
+        /// W_draw's horizon: RSKY1..3 stamped at a parallax offset.
+        ///
+        /// The constants are the original's, character for character:
+        /// `127-(w_x-100)*56/(FLDW*CELW-200)` and `123-(w_y-49)*28/(FLDH*CELH-98)`.
+        /// The sky is a 256x256 picture hung near the bottom of the view, so at the
+        /// centre of a level it is off-screen entirely — which is what the DOS
+        /// editor showed too, and why an empty top of the view is not a bug.
+        /// </summary>
+        private static void DrawSky(MapFile map, int wX, int wY, int viewX, int viewY)
         {
-            if (index == 0) return;
+            VgaImage image = Sky(map);
 
-            VgaImage image = Texture(map, index);
             if (image == null) return;
 
-            Vga.Pic(px, py, image);
+            int x = viewX + 127 - (wX - ViewHalfW) * 56 / SkyRangeX;
+            int y = viewY + 122 - (wY - ViewHalfH) * 28 / SkyRangeY;
+
+            Vga.Pic(x, y, image);
+        }
+
+        private static VgaImage Sky(MapFile map)
+        {
+            int type = map.Sky > 0 ? map.Sky : 1;
+
+            if (sky != null && skyType == type) return sky;
+
+            int id = Wad.FindRes("RSKY" + type);
+
+            sky = id >= 0 ? Res.Img(id) : null;
+            skyType = type;
+
+            return sky;
+        }
+
+        /// <summary>
+        /// Z_drawfld: one texture stamped per cell, at the cell's top-left corner.
+        ///
+        /// Not one 8x8 piece per cell: the original calls V_pic with the whole
+        /// 16x16 texture, so neighbouring cells overlap and a wall reads as one
+        /// continuous surface instead of a grid of tiles.
+        /// </summary>
+        private static void DrawField(MapFile map, byte[] field, int wX, int wY,
+            int originX, int originY, int viewW, int viewH)
+        {
+            for (int cy = 0; cy < FieldHeight; ++cy)
+            {
+                int sy = cy * CellSize - wY + originY;
+
+                if (sy > originY + viewH || sy + CellSize < originY - CellSize) continue;
+
+                for (int cx = 0; cx < FieldWidth; ++cx)
+                {
+                    int index = field[cy * FieldWidth + cx];
+                    if (index == 0) continue;
+
+                    int sx = cx * CellSize - wX + originX;
+
+                    if (sx > originX + viewW || sx + CellSize < originX - CellSize) continue;
+
+                    VgaImage image = Texture(map, index);
+
+                    if (image != null) Vga.Pic(sx, sy, image);
+                }
+            }
+        }
+
+        /// <summary>tctab, the type layer's colours, shared by the view and the minimap.</summary>
+        public static byte TypeColor(int type)
+        {
+            return type > 0 && type < TypeTable.Length ? TypeTable[type] : (byte)0xFB;
         }
 
         private static VgaImage Texture(MapFile map, int index)
         {
             VgaImage found;
+
             if (textures.TryGetValue(index, out found)) return found;
 
             VgaImage image = null;
@@ -111,81 +187,138 @@ namespace DPTDOOM2D.Editor
         public static void Forget()
         {
             textures.Clear();
+            sky = null;
+            skyType = -1;
         }
 
-        /// <summary>
-        /// The collision layer. A sparse stipple, not a solid fill: the texture
-        /// under it stays readable, which is the point of drawing the real artwork.
-        /// </summary>
-        private static void DrawTypes(MapFile map, int camX, int camY,
-            int viewX, int viewY, int viewW, int viewH)
+        /// <summary>Z_drawfldt: a 4x4 colour block per cell, inset by two pixels.</summary>
+        private static void DrawTypes(MapFile map, int wX, int wY,
+            int originX, int originY, int viewW, int viewH)
         {
-            for (int y = 0; y < MapFile.Height; ++y)
+            for (int cy = 0; cy < FieldHeight; ++cy)
             {
-                for (int x = 0; x < MapFile.Width; ++x)
+                int sy = cy * CellSize - wY + originY;
+
+                if (sy + 2 > originY + viewH || sy + 6 < originY) continue;
+
+                for (int cx = 0; cx < FieldWidth; ++cx)
                 {
-                    byte type = map.Type[y * MapFile.Width + x];
+                    int type = map.Type[cy * FieldWidth + cx];
                     if (type == 0) continue;
 
-                    byte color = TypeColor(type);
-                    int baseX = x * CellSize - camX + viewX;
-                    int baseY = y * CellSize - camY + viewY;
+                    int sx = cx * CellSize - wX + originX;
 
-                    if (baseX > viewX + viewW || baseY > viewY + viewH) continue;
-                    if (baseX + CellSize < viewX || baseY + CellSize < viewY) continue;
+                    if (sx + 2 > originX + viewW || sx + 6 < originX) continue;
 
-                    for (int py = 0; py < CellSize; py += 2)
-                    {
-                        for (int px = 0; px < CellSize; px += 2)
-                        {
-                            Vga.PutPixel(baseX + px, baseY + py, color);
-                        }
-                    }
+                    byte color = type < TypeTable.Length ? TypeTable[type] : (byte)0xFB;
+
+                    Vga.Clr(sx + 2, 4, sy + 2, 4, color);
                 }
             }
         }
 
-        private static byte TypeColor(int type)
-        {
-            switch (type)
-            {
-                case Game.Cell.Wall: return 0xB0;
-                case Game.Cell.WallSwapped: return 0x90;
-                case Game.Cell.Water: return 0xC0;
-                case Game.Cell.WaterTop: return 0xC1;
-                case Game.Cell.Acid: return 0xA0;
-                case Game.Cell.AcidDeep: return 0xA1;
-                case Game.Cell.Lava: return 0xA2;
-                case Game.Cell.Trap: return 0x40;
-                case Game.Cell.LiftUp: return 0x70;
-                case Game.Cell.LiftDown: return 0x71;
-                default: return 0x50;
-            }
-        }
-
-        private static void DrawThings(MapFile map, int camX, int camY,
-            int viewX, int viewY, int viewW, int viewH)
+        /// <summary>
+        /// TH_draw: one sprite per thing, players and DM starts in their own colour,
+        /// and a bracket around the selected one.
+        ///
+        /// The bracket is four one-pixel lines in 0xAD, drawn at +-5 pixels — the
+        /// original's way of saying "this is what the tab is editing".
+        /// </summary>
+        private static void DrawThings(MapFile map, int wX, int wY,
+            int originX, int originY, int selected)
         {
             for (int i = 0; i < map.Things.Count; ++i)
             {
                 MapThing thing = map.Things[i];
+
+                int sx = thing.X - wX + originX;
+                int sy = thing.Y - wY + originY;
+
+                if (sx < -64 || sx > 264 || sy < -64 || sy > 162) continue;
+
                 VgaImage sprite = ThingSprite(thing.Type);
 
-                if (sprite != null)
-                {
-                    // Things are stored by their feet, as the game draws them.
-                    int px = thing.X - sprite.W / 2 - camX + viewX;
-                    int py = thing.Y - sprite.H - camY + viewY;
+                if (sprite != null) Vga.Spr(sx, sy, sprite);
 
-                    Vga.Spr(px, py, sprite);
-                }
-                else
-                {
-                    int px = thing.X - camX + viewX;
-                    int py = thing.Y - camY + viewY;
-                    Vga.Clr(px - 2, 5, py - 5, 5, ThingColor(thing.Type));
-                }
+                if (i != selected) continue;
+
+                Vga.Clr(sx - 5, 11, sy - 10, 1, 0xAD);
+                Vga.Clr(sx - 5, 11, sy, 1, 0xAD);
+                Vga.Clr(sx - 5, 1, sy - 9, 9, 0xAD);
+                Vga.Clr(sx + 5, 1, sy - 9, 9, 0xAD);
             }
+        }
+
+        /// <summary>
+        /// SW_draw: four dots marking a switch, in 0x70 or 0xA0 when selected, and
+        /// four more marking where it acts.
+        /// </summary>
+        private static void DrawSwitches(MapFile map, int wX, int wY,
+            int originX, int originY, int selected)
+        {
+            for (int i = 0; i < map.Switches.Count; ++i)
+            {
+                MapSwitch sw = map.Switches[i];
+
+                int x = sw.X * CellSize + 1 - wX + originX;
+                int y = sw.Y * CellSize + 1 - wY + originY;
+
+                byte color = (byte)(i == selected ? 0xA0 : 0x70);
+
+                Vga.PutPixel(x, y, color);
+                Vga.PutPixel(x + 5, y, color);
+                Vga.PutPixel(x + 5, y + 5, color);
+                Vga.PutPixel(x, y + 5, color);
+
+                if (i != selected) continue;
+
+                int tx = sw.A * CellSize + 1 - wX + originX;
+                int ty = sw.B * CellSize + 1 - wY + originY;
+
+                Vga.PutPixel(tx + 2, ty, 0xB0);
+                Vga.PutPixel(tx + 3, ty + 5, 0xB0);
+                Vga.PutPixel(tx, ty + 3, 0xB0);
+                Vga.PutPixel(tx + 5, ty + 2, 0xB0);
+            }
+        }
+
+        private static readonly byte[] SelectionMap = SelectionCmap();
+
+        /// <summary>
+        /// clrmap row 6, the one W_draw uses for the rectangle being dragged.
+        ///
+        /// Copied out of the table once because MapPixel takes a 256-byte slice and
+        /// the palette keeps all twelve rows in one array.
+        /// </summary>
+        private static byte[] SelectionCmap()
+        {
+            byte[] row = new byte[256];
+            Array.Copy(Palette.ClrMap, 6 * 256, row, 0, 256);
+            return row;
+        }
+
+        /// <summary>
+        /// The rectangle being dragged, remapped with clrmap[6] the way W_draw does
+        /// it — a darkening pass, so the area stays readable while it is chosen.
+        /// </summary>
+        private static void DrawSelection(int x1, int y1, int x2, int y2,
+            int wX, int wY, int originX, int originY, int viewW, int viewH)
+        {
+            int left = Math.Min(x1, x2), right = Math.Max(x1, x2);
+            int top = Math.Min(y1, y2), bottom = Math.Max(y1, y2);
+
+            int sx = left * CellSize - wX + originX;
+            int sy = top * CellSize - wY + originY;
+
+            int w = (right - left) * CellSize + CellSize;
+            int h = (bottom - top) * CellSize + CellSize;
+
+            if (sx > originX + viewW || sy > originY + viewH) return;
+            if (sx + w < originX || sy + h < originY) return;
+
+            for (int py = Math.Max(originY, sy); py < Math.Min(originY + viewH, sy + h); ++py)
+                for (int px = Math.Max(originX, sx); px < Math.Min(originX + viewW, sx + w); ++px)
+                    Vga.MapPixel(px, py, SelectionMap);
         }
 
         /// <summary>
@@ -226,15 +359,6 @@ namespace DPTDOOM2D.Editor
             "AQUA", "KEYR", "KEYG", "KEYB", "SUIT",
             "GOR1"
         };
-
-        private static byte ThingColor(int type)
-        {
-            if (type == MapThingType.Plr1) return 0x70;
-            if (type == MapThingType.Plr2) return 0x60;
-            if (type == MapThingType.DmStart) return 0x20;
-            if (type >= MapThingType.Demon) return 0xB0;
-            return 0x90;
-        }
 
         // ---------------------------------------------------------------- bitmap
 

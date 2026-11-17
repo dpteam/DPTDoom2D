@@ -81,6 +81,39 @@ namespace DPTDOOM2D.Engine
                 Bright[i] = (byte)(((int)Main[i * 3] + Main[i * 3 + 1] + Main[i * 3 + 2]) * 8 / (63 * 3));
         }
 
+        /// <summary>
+        /// getbestcolor from gui.cpp: the palette index closest to a 6-bit colour.
+        ///
+        /// The GUI builds its grey ramp this way instead of hard-coding indices, so
+        /// the same code works with any WAD: `gray[i] = getbestcolor(i*4, i*4, i*4)`.
+        /// The distance is weighted by the dominant channel, which is what the
+        /// original does and why its greys are not the ones a plain Euclidean
+        /// search would pick.
+        /// </summary>
+        public static byte GetBestColor(int r, int g, int b)
+        {
+            if (r < 0) r = 0; if (r > 63) r = 63;
+            if (g < 0) g = 0; if (g > 63) g = 63;
+            if (b < 0) b = 0; if (b > 63) b = 63;
+
+            int rt = (r >= g && r >= b) ? 2 : 1;
+            int gt = (g >= r && g >= b) ? 2 : 1;
+            int bt = (b >= r && b >= g) ? 2 : 1;
+
+            int best = 1;
+            int m = Math.Abs(Main[3] - r) * rt + Math.Abs(Main[4] - g) * gt + Math.Abs(Main[5] - b) * bt;
+
+            for (int i = 2; i < 256; ++i)
+            {
+                int at = i * 3;
+                int j = Math.Abs(Main[at] - r) * rt + Math.Abs(Main[at + 1] - g) * gt + Math.Abs(Main[at + 2] - b) * bt;
+
+                if (m > j) { best = i; m = j; }
+            }
+
+            return (byte)best;
+        }
+
         static void LoadGammaTable()
         {
             for (int i = 0; i < 5; ++i) GamCor[i] = Identity();

@@ -19,9 +19,24 @@ namespace DPTDOOM2D.Engine
 
         public static bool Available { get { return Output != null && Output.IsOpen; } }
 
+        /// <summary>
+        /// Set by -nosound: the game never opens a device at all.
+        ///
+        /// Distinct from "no device found": a machine with a sound card but a headless
+        /// test run should not pay for opening one, and a CI container should not wait
+        /// on a service that is not there.
+        /// </summary>
+        public static bool Disabled;
+
         public static void Start()
         {
             if (Output != null) return;
+
+            if (Disabled)
+            {
+                Log.Info("audio: off (-nosound)");
+                return;
+            }
 
             Output = new AudioOut();
             Output.Renderer = Mixer.Render;

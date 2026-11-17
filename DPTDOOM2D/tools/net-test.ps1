@@ -1,7 +1,8 @@
 param(
     [string]$Out = "$env:TEMP\net",
     [int]$Port = 5130,
-    [int]$Ticks = 400
+    [int]$Ticks = 400,
+    [int]$TimeoutSeconds = 90
 )
 
 <#
@@ -11,6 +12,13 @@ param(
     The host and the guest are two processes; the guest connects to 127.0.0.1,
     which exercises the same code path as a LAN game. A session that stays up for
     N ticks with matching checksums is the test.
+
+    Nothing here waits a fixed number of seconds. A CI container takes ten seconds
+    to get a window up — and used to take five of those in waveOutOpen alone — so a
+    fixed "sleep 2, then poll for six" turned a slow machine into a failed
+    handshake that looked like a network bug. Every wait is now a poll with a
+    generous timeout, and every launch passes -nosound, because a test run has no
+    use for a device.
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -20,77 +28,142 @@ $exe = Join-Path $root 'bin\Release\net40\dptdoom2d.exe'
 if (-not (Test-Path $exe)) { throw 'build the game first (tools\build.ps1)' }
 
 New-Item -ItemType Directory -Path $Out -Force | Out-Null
-$hostLog = Join-Path $Out 'host.log'
-$guestLog = Join-Path $Out 'guest.log'
 
-# A previous run leaves the port in TIME_WAIT for up to two minutes, and binding
-# it again fails the check for a reason that has nothing to do with the code.
-foreach ($candidate in $Port..($Port + 40))
+# ---------------------------------------------------------------- helpers
+
+<#
+    Waits until a log file matches a pattern, or the deadline passes.
+
+    Returns $true on a match. Reading a log that the process is still writing is
+    safe here: the file is opened for append by the child and read with a share
+    that allows it.
+#>
+function Wait-ForLog([string]$path, [string]$pattern, [int]$seconds)
 {
-    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
+    $deadline = (Get-Date).AddSeconds($seconds)
+
+    while ((Get-Date) -lt $deadline)
     {
-        $Port = $candidate
-        break
+        if (Test-Path $path)
+        {
+            try
+            {
+                $text = Get-Content $path -Raw -ErrorAction SilentlyContinue
+
+                if ($text -and $text -match $pattern) { return $true }
+            }
+            catch
+            {
+                # The file may be mid-write; try again on the next pass.
+            }
+        }
+
+        Start-Sleep -Milliseconds 200
+    }
+
+    return $false
+}
+
+<# A free TCP port at or above the hint, so a TIME_WAIT from a previous run cannot
+   make the next run fail for a reason that has nothing to do with the code. #>
+function Find-FreePort([int]$hint)
+{
+    for ($candidate = $hint; $candidate -lt $hint + 200; ++$candidate)
+    {
+        if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
+        {
+            return $candidate
+        }
+    }
+
+    throw "no free port near $hint"
+}
+
+function Show-Log([string]$title, [string]$path, [string]$filter)
+{
+    Write-Host "--- $title ---"
+
+    if (-not (Test-Path $path)) { Write-Host '(no log)'; return }
+
+    $lines = Get-Content $path -ErrorAction SilentlyContinue
+
+    if ($filter) { $lines = $lines | Where-Object { $_ -match $filter } }
+
+    $lines | Select-Object -Last 12
+}
+
+function Stop-Quietly($process)
+{
+    if ($process -and -not $process.HasExited)
+    {
+        try { $process.Kill() } catch { }
     }
 }
 
+# ---------------------------------------------------------------- direct session
+
+$Port = Find-FreePort $Port
+
 Write-Host "== host on port $Port" -ForegroundColor Cyan
+$hostLog = Join-Path $Out 'host.log'
+$guestLog = Join-Path $Out 'guest.log'
+
 $hostProcess = Start-Process -FilePath $exe `
-    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1' `
+    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-nosound' `
     -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
 
-Start-Sleep -Seconds 2
+# The host has to be listening before the guest tries: starting the guest first
+# only tests how fast the host boots.
+if (-not (Wait-ForLog $hostLog 'waiting for a player' $TimeoutSeconds))
+{
+    Write-Host '== the host never started listening' -ForegroundColor Red
+    Show-Log 'host' $hostLog 'net:|data:|audio:'
+    Stop-Quietly $hostProcess
+    exit 1
+}
 
 Write-Host '== guest' -ForegroundColor Cyan
 $guestProcess = Start-Process -FilePath $exe `
-    -ArgumentList '-net', 'join', '-address', '127.0.0.1', '-port', $Port, '-scale', '1' `
+    -ArgumentList '-net', 'join', '-address', '127.0.0.1', '-port', $Port, '-scale', '1', '-nosound' `
     -PassThru -RedirectStandardOutput $guestLog -RedirectStandardError "$guestLog.err"
 
-Start-Sleep -Seconds 2
-
-$connected = $false
-foreach ($i in 1..20)
-{
-    Start-Sleep -Milliseconds 300
-    $hostText = if (Test-Path $hostLog) { Get-Content $hostLog -Raw } else { '' }
-    $guestText = if (Test-Path $guestLog) { Get-Content $guestLog -Raw } else { '' }
-    if ($hostText -match 'connected as player 1' -and $guestText -match 'connected as player 2') { $connected = $true; break }
-}
+$connected = (Wait-ForLog $guestLog 'connected as player 2' $TimeoutSeconds) -and
+             (Wait-ForLog $hostLog 'connected as player 1' 10)
 
 if (-not $connected)
 {
     Write-Host '== handshake failed' -ForegroundColor Red
-    Write-Host '--- host ---'; if (Test-Path $hostLog) { Get-Content $hostLog | Select-Object -Last 20 }
-    Write-Host '--- guest ---'; if (Test-Path $guestLog) { Get-Content $guestLog | Select-Object -Last 20 }
-    foreach ($p in $hostProcess, $guestProcess) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+    Show-Log 'host' $hostLog 'net:|data:'
+    Show-Log 'guest' $guestLog 'net:|data:'
+    Stop-Quietly $hostProcess
+    Stop-Quietly $guestProcess
     exit 1
 }
 
 Write-Host '== both connected, running' -ForegroundColor Green
 Start-Sleep -Milliseconds ($Ticks * 50 / 10)
 
-$desync = $false
-foreach ($p in $hostProcess, $guestProcess)
-{
-    if ($p -and -not $p.HasExited) { $p.Kill() }
-}
-
+Stop-Quietly $hostProcess
+Stop-Quietly $guestProcess
 Start-Sleep -Milliseconds 300
+
+$desync = $false
 
 foreach ($log in $hostLog, $guestLog)
 {
     if (-not (Test-Path $log)) { continue }
+
     $text = Get-Content $log -Raw
-    if ($text -match 'DESYNC') { $desync = $true; Write-Host "desync reported in $log" -ForegroundColor Red }
+
+    if ($text -match 'DESYNC')
+    {
+        $desync = $true
+        Write-Host "desync reported in $log" -ForegroundColor Red
+    }
 }
 
-$hostText = Get-Content $hostLog -Raw
-$guestText = Get-Content $guestLog -Raw
-
-Write-Host '--- host ---'
-$hostText -split "`r?`n" | Where-Object { $_ -match 'net:' } | Select-Object -Last 6
-Write-Host '--- guest ---'
-$guestText -split "`r?`n" | Where-Object { $_ -match 'net:' } | Select-Object -Last 6
+Show-Log 'host' $hostLog 'net:'
+Show-Log 'guest' $guestLog 'net:'
 
 if ($desync)
 {
@@ -106,14 +179,7 @@ Write-Host '== session ran without desync' -ForegroundColor Green
 # be refused before the first tick, and the refusal has to name the file. A guest
 # with a mod the host does not have is the everyday case.
 
-foreach ($candidate in $Port..($Port + 40))
-{
-    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
-    {
-        $Port = $candidate
-        break
-    }
-}
+$Port = Find-FreePort ($Port + 1)
 
 $modSrc = Join-Path $Out 'mismatch'
 Remove-Item $modSrc -Recurse -Force -ErrorAction SilentlyContinue
@@ -130,34 +196,40 @@ $hostLog = Join-Path $Out 'mismatch-host.log'
 $guestLog = Join-Path $Out 'mismatch-guest.log'
 
 $hostProcess = Start-Process -FilePath $exe `
-    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-file', $modPk3 `
+    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-nosound', '-file', $modPk3 `
     -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
 
-Start-Sleep -Seconds 2
+if (-not (Wait-ForLog $hostLog 'waiting for a player' $TimeoutSeconds))
+{
+    Write-Host '== the mismatch host never started listening' -ForegroundColor Red
+    Show-Log 'host' $hostLog 'net:|data:'
+    Stop-Quietly $hostProcess
+    exit 1
+}
 
 $guestProcess = Start-Process -FilePath $exe `
-    -ArgumentList '-net', 'join', '-address', '127.0.0.1', '-port', $Port, '-scale', '1' `
+    -ArgumentList '-net', 'join', '-address', '127.0.0.1', '-port', $Port, '-scale', '1', '-nosound' `
     -PassThru -RedirectStandardOutput $guestLog -RedirectStandardError "$guestLog.err"
 
-Start-Sleep -Seconds 3
+# The refusal is the expected outcome, so the wait is for the refusal itself.
+$refused = Wait-ForLog $guestLog 'different game data' $TimeoutSeconds
 
-foreach ($p in $hostProcess, $guestProcess) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+Stop-Quietly $hostProcess
+Stop-Quietly $guestProcess
 Start-Sleep -Milliseconds 300
 
 $hostText = if (Test-Path $hostLog) { Get-Content $hostLog -Raw } else { '' }
 $guestText = if (Test-Path $guestLog) { Get-Content $guestLog -Raw } else { '' }
 
-if ($hostText -match 'different game data' -and $guestText -match 'mismatch\.pk3')
+if ($refused -and $hostText -match 'different game data' -and $guestText -match 'mismatch\.pk3')
 {
     Write-Host '== mismatched data refused, and the file was named' -ForegroundColor Green
 }
 else
 {
     Write-Host '== mismatch was NOT refused' -ForegroundColor Red
-    Write-Host '--- host ---'; $hostText -split "?
-" | Where-Object { $_ -match 'net:|data:' } | Select-Object -Last 5
-    Write-Host '--- guest ---'; $guestText -split "?
-" | Where-Object { $_ -match 'net:|data:' } | Select-Object -Last 5
+    Show-Log 'host' $hostLog 'net:|data:'
+    Show-Log 'guest' $guestLog 'net:|data:'
     exit 1
 }
 
@@ -167,20 +239,12 @@ else
 # connect. --netdata is the console view of the same data: a line per session
 # saying whether this installation matches it.
 
-foreach ($candidate in $Port..($Port + 40))
-{
-    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
-    {
-        $Port = $candidate
-        break
-    }
-}
+$Port = Find-FreePort ($Port + 1)
 
 Write-Host '== catalogue knows the data' -ForegroundColor Cyan
 
-$masterPort = $Port + 10
-while (Get-NetTCPConnection -LocalPort $masterPort -ErrorAction SilentlyContinue) { $masterPort += 10 }
-$relayPort = $masterPort + 1
+$masterPort = Find-FreePort ($Port + 10)
+$relayPort = Find-FreePort ($masterPort + 1)
 
 $masterExe = Join-Path $root '..\DPTDOOM2D.Master\bin\Release\net40\dptdoom2d-master.exe'
 $masterLog = Join-Path $Out 'catalogue-master.log'
@@ -189,30 +253,39 @@ $masterProcess = Start-Process -FilePath $masterExe `
     -ArgumentList '--bind', '127.0.0.1', '--port', $masterPort, '--relay-port', $relayPort `
     -PassThru -RedirectStandardOutput $masterLog -RedirectStandardError "$masterLog.err"
 
-Start-Sleep -Seconds 2
+if (-not (Wait-ForLog $masterLog 'listening on' $TimeoutSeconds))
+{
+    Write-Host '== the master never started' -ForegroundColor Red
+    Show-Log 'master' $masterLog 'listening|error'
+    Stop-Quietly $masterProcess
+    exit 1
+}
 
 $endpoint = '127.0.0.1:' + $masterPort
 $hostLog = Join-Path $Out 'catalogue-host.log'
 
 $hostProcess = Start-Process -FilePath $exe `
-    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-master', $endpoint, '-relay' `
+    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-nosound', '-master', $endpoint, '-relay' `
     -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
 
-Start-Sleep -Seconds 4
+# Wait for the registration, not for a guessed number of seconds: the manifest is
+# published right after it, and --netdata would otherwise see an empty catalogue.
+$registered = Wait-ForLog $hostLog 'published the data manifest|does not accept a data manifest' $TimeoutSeconds
 
 $catalogue = & $exe --netdata $endpoint 2>&1 | Out-String
 
-foreach ($p in $hostProcess, $masterProcess) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+Stop-Quietly $hostProcess
+Stop-Quietly $masterProcess
 
-if ($catalogue -match 'data matches')
+if ($registered -and $catalogue -match 'data matches')
 {
     Write-Host '== the session advertises matching data' -ForegroundColor Green
 }
 else
 {
     Write-Host '== the catalogue did not report matching data' -ForegroundColor Red
-    $catalogue -split "?
-" | Select-Object -Last 6
+    Show-Log 'host' $hostLog 'net:|data:'
+    $catalogue -split "`r?`n" | Select-Object -Last 6
     exit 1
 }
 

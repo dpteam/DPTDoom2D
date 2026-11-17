@@ -153,6 +153,13 @@ namespace DPTDOOM2D.Engine
             Mixer.Channel target = mixer.GetChannel(index);
             if (target == null) return -1;
 
+            // Order matters, and so does the generation bump: the mixer may be inside
+            // this channel right now. Bumping first means its write-back of the old
+            // position is discarded, so the restart wins instead of the sound being
+            // heard from the middle and then again from the start.
+            ++target.Generation;
+
+            target.Active = false;
             target.Data = sound.Data;
             target.Length = sound.Data.Length;
             target.Rate = sound.Rate;
@@ -161,6 +168,8 @@ namespace DPTDOOM2D.Engine
             target.Loop = sound.LoopLength > 0;
             target.LoopStart = sound.LoopStart;
             target.LoopLength = sound.LoopLength;
+
+            // Active last: a channel is only ever seen fully set up.
             target.Active = true;
 
             return index;

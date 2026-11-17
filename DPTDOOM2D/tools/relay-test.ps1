@@ -69,14 +69,14 @@ try
 
     Write-Host '== host registering through the master' -ForegroundColor Cyan
     $hostProcess = Start-Process -FilePath $game `
-        -ArgumentList '-net', 'host', '-port', $GamePort, '-map', '1', '-scale', '1',
+        -ArgumentList '-net', 'host', '-port', $GamePort, '-map', '1', '-scale', '1', '-nosound',
                       '-master', "127.0.0.1:$MasterPort", '-relay' `
         -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
     $processes += $hostProcess
 
     # Wait for the host to publish its session id.
     $sessionId = $null
-    foreach ($i in 1..30)
+    foreach ($i in 1..300)
     {
         Start-Sleep -Milliseconds 300
         if (Test-Path $hostLog)
@@ -103,7 +103,7 @@ try
     # separate steps; a guest that arrives in between is told the session does
     # not exist, falls back to a direct connection, and fails because a relay
     # host is not listening on its game port at all.
-    foreach ($i in 1..40)
+    foreach ($i in 1..300)
     {
         Start-Sleep -Milliseconds 200
         if ((Test-Path $hostLog) -and ((Get-Content $hostLog -Raw) -match 'relay channel open')) { break }
@@ -114,12 +114,12 @@ try
 
     $guestProcess = Start-Process -FilePath $game `
         -ArgumentList '-net', 'join', '-master', "127.0.0.1:$MasterPort", '-relay-session', $sessionId,
-                      '-scale', '1' `
+                      '-scale', '1', '-nosound' `
         -PassThru -RedirectStandardOutput $guestLog -RedirectStandardError "$guestLog.err"
     $processes += $guestProcess
 
     $connected = $false
-    foreach ($i in 1..30)
+    foreach ($i in 1..300)
     {
         Start-Sleep -Milliseconds 300
         $hostText = if (Test-Path $hostLog) { Get-Content $hostLog -Raw } else { '' }
