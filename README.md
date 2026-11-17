@@ -69,6 +69,7 @@
 <table>
 <tr><td><img src="docs/images/menu.png" width="420"></td><td><img src="docs/images/intermission.png" width="420"></td></tr>
 <tr><td><img src="docs/images/overlay.png" width="420"></td><td><img src="docs/images/launcher.png" width="420"></td></tr>
+<tr><td><img src="docs/images/launcher-servers.png" width="420"></td><td><img src="docs/images/launcher-mods.png" width="420"></td></tr>
 <tr><td colspan="2"><img src="docs/images/custommap.png" width="840"><br><sub>Кастомная карта из библиотеки (<code>kozak__arena.wad</code>) — deathmatch на двоих</sub></td></tr>
 </table>
 
@@ -97,6 +98,9 @@ cd DPTDoom2D
 | `dptdoom2d.exe` | игра |
 | `dptdoom2d-launcher.exe` | лаунчер: режим, карта, пак, моды, масштаб, сеть |
 | `dptdoom2d-master.exe` | мастер-сервер + релей для игры через интернет |
+
+Лаунчер — **настоящий HTML/CSS/JS** в `WebBrowser` (MSHTML), как в DPT.DOOM:
+разметка в `DPTDOOM2D.Launcher/Assets/`, правится без пересборки логики.
 ## Кастомные карты
 
 В `Data/Maps` лежит библиотека из **166 WAD'ов** эпохи Deluxe: deathmatch-арены,
