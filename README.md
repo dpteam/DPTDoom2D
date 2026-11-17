@@ -66,6 +66,7 @@
 <table>
 <tr><td><img src="docs/images/menu.png" width="420"></td><td><img src="docs/images/intermission.png" width="420"></td></tr>
 <tr><td><img src="docs/images/overlay.png" width="420"></td><td><img src="docs/images/launcher.png" width="420"></td></tr>
+<tr><td colspan="2"><img src="docs/images/custommap.png" width="840"><br><sub>Кастомная карта из библиотеки (<code>kozak__arena.wad</code>) — deathmatch на двоих</sub></td></tr>
 </table>
 
 ## Быстрый старт

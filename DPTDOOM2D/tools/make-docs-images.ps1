@@ -83,6 +83,10 @@ Run @('--simulate', '300', (Join-Path $tmp 'coop.bmp'), '1', '5:right,80:fire,84
 # Deathmatch: both players fight on the same map.
 Run @('--simulate', '400', (Join-Path $tmp 'deathmatch.bmp'), '1', '5:right,120:fire,124:-fire', 'dm')
 
+# A custom map pack from the bundled library, so the docs show that path too.
+Run @('-map-pack', 'kozak__arena.wad', '--simulate', '200', (Join-Path $tmp 'custommap.bmp'), '1',
+	'5:right,60:fire,64:-fire', 'dm')
+
 # Intermission screen, produced by actually leaving the level.
 Push-Location (Join-Path $root 'bin\Release\net40')
 try { Run @('--levelend', '1') } finally { Pop-Location }
@@ -95,6 +99,7 @@ Convert-Bmp (Join-Path $tmp 'gameplay.bmp') (Join-Path $OutDir 'gameplay.png') 2
 Convert-Bmp (Join-Path $tmp 'level14.bmp') (Join-Path $OutDir 'level14.png') 2
 Convert-Bmp (Join-Path $tmp 'coop.bmp') (Join-Path $OutDir 'coop.png') 2
 Convert-Bmp (Join-Path $tmp 'deathmatch.bmp') (Join-Path $OutDir 'deathmatch.png') 2
+Convert-Bmp (Join-Path $tmp 'custommap.bmp') (Join-Path $OutDir 'custommap.png') 2
 Convert-Bmp (Join-Path $tmp 'intermission.bmp') (Join-Path $OutDir 'intermission.png') 2
 
 # The logo is the game's own wordmark, cropped out of the title screen and
