@@ -171,6 +171,19 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  manifest FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  manifest ok' -ForegroundColor DarkGray }
 
+		# Resource audit: run the game and record everything it asks the WAD for.
+		# A missing sprite set is a Fatal the first time a monster spawns, so the
+		# audit exits non-zero for that; missing glyphs are only reported.
+		& $exe --wadreq 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  wadreq FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  wadreq ok' -ForegroundColor DarkGray }
+
+		# Music converter: a MIDI becomes a DMM, and the real loader reads it back.
+		# This is what FreeDooM2D needs — FreeDoom's music is MIDI, Doom2D's is DMM.
+		& $exe --muscheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  music converter FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  music converter ok' -ForegroundColor DarkGray }
+
 		# Map writer: every map in the game and in the 166 custom packs has to survive
 		# a read-write-read round trip byte for byte. The editor cannot save a map
 		# until this passes, because a writer that is "almost right" corrupts levels.

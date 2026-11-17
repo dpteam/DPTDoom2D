@@ -102,6 +102,23 @@ namespace DPTDOOM2D
                 }
                 if (args[i] == "--datacheck")
                     return Headless.ManifestCheck();
+                if (args[i] == "--wadreq")
+                {
+                    // --wadreq [candidate.wad]: the audit compares against this file
+                    // instead of loading it. Deliberately not a -file: the whole point
+                    // is to ask a candidate what it lacks, and loading it would answer
+                    // "it has everything" by merging it with the real data.
+                    Config.WadAuditCandidate = "";
+                    if (i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
+                        Config.WadAuditCandidate = args[i + 1];
+
+                    Boot();
+                    return Headless.WadAudit();
+                }
+                if (args[i] == "--mid2dmm" && i + 2 < args.Length)
+                    return Headless.MidiToDmmFile(args[i + 1], args[i + 2]);
+                if (args[i] == "--muscheck")
+                    return Headless.MusicConvertCheck();
                 if (args[i] == "--mapcheck")
                 {
                     Boot();

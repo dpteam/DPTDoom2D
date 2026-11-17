@@ -295,8 +295,42 @@ namespace DPTDOOM2D.Engine
         public static int FindRes(string name)
         {
             for (int i = 0; i < Entries.Count; ++i)
-                if (NameEq(Entries[i].Name, name, 8)) return i;
+                if (NameEq(Entries[i].Name, name, 8))
+                {
+                    if (audit != null) audit.Note(name, true);
+                    return i;
+                }
+
+            if (audit != null) audit.Note(name, false);
             return -1;
+        }
+
+        // ---- resource audit -------------------------------------------------
+        //
+        // --wadreq needs the complete list of what the game asks for, and the only
+        // way to get a complete list is to let the game ask. Guessing it from the
+        // source gives a list that is always one lump short, and the missing lump is
+        // a Fatal on someone else's machine.
+
+        /// <summary>Where lookups are recorded while an audit runs; null normally.</summary>
+        private static ResourceAudit audit;
+
+        public static void BeginAudit()
+        {
+            audit = new ResourceAudit();
+        }
+
+        public static ResourceAudit EndAudit()
+        {
+            ResourceAudit result = audit;
+            audit = null;
+            return result;
+        }
+
+        /// <summary>Records a sprite set name, so the audit knows what art is needed.</summary>
+        internal static void NoteSprite(string name, bool found)
+        {
+            if (audit != null) audit.NoteSprite(name, found);
         }
 
         public static string GetResName(int r)
@@ -348,6 +382,11 @@ namespace DPTDOOM2D.Engine
         /// </summary>
         public static int TryGetSprId(string name, int s, int d)
         {
+            // The audit asks "is this sprite set in the WAD", not "is frame F7
+            // rotation 2 there", so presence is checked once per set and the answer
+            // does not depend on which frame the caller happened to want.
+            if (audit != null) NoteSprite(name, HasSpriteSet(name));
+
             int frame = 'A' + s;
             int dir = '0' + d;
 
@@ -367,6 +406,15 @@ namespace DPTDOOM2D.Engine
             }
 
             return -1;
+        }
+
+        /// <summary>True when any lump in the sprite range starts with this four-letter name.</summary>
+        private static bool HasSpriteSet(string name)
+        {
+            for (int i = SStart + 1; i < SEnd; ++i)
+                if (NameEq(Entries[i].Name, name, 4)) return true;
+
+            return false;
         }
 
         static char CharAt(string s, int i)

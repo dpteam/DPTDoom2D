@@ -32,6 +32,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\DPTDOOM2D\Engine\Wad.cs" Link="Engine\Wad.cs" />
+    <Compile Include="..\DPTDOOM2D\Engine\ResourceAudit.cs" Link="Engine\ResourceAudit.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Vga.cs" Link="Engine\Vga.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\VgaImage.cs" Link="Engine\VgaImage.cs" />
     <Compile Include="..\DPTDOOM2D\Engine\Palette.cs" Link="Engine\Palette.cs" />

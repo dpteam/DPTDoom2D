@@ -61,6 +61,12 @@ namespace DPTDOOM2D.Engine
         /// <summary>Custom map pack from Data/Maps, or empty for the built-in levels.</summary>
         public static string MapPack = "";
 
+        /// <summary>
+        /// A candidate WAD for --wadreq to compare against: the audit reports what the
+        /// game asks for that this file does not have.
+        /// </summary>
+        public static string WadAuditCandidate = "";
+
         public static Win32.Win32Window.StretchMode StretchMode
         {
             get

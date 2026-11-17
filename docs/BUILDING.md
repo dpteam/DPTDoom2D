@@ -99,6 +99,9 @@ dptdoom2d.exe --mapsave <map> <out.wad>
 dptdoom2d-editor.exe --save <map> <out.wad>
 dptdoom2d-editor.exe --render <map> <out.bmp>
 dptdoom2d.exe --netdata <master>
+dptdoom2d.exe --wadreq [candidate.wad]
+dptdoom2d.exe --muscheck
+dptdoom2d.exe --mid2dmm <in.mid> <out.dmm|out.wad>
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
@@ -147,6 +150,18 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 
 `--netdata <host:port>` печатает по строке на сессию в каталоге мастера: какие
 файлы нужны и чего не хватает этой установке. То же, что видит лаунчер.
+
+`--wadreq` прогоняет игру по всем картам и печатает **каждый ресурс, который она
+запросила**: лампы, наборы спрайтов и то, чего в WAD нет. Это список требований к
+замене данных — без него конвертер FreeDoom был бы угадайкой. С аргументом
+сравнивает с другим файлом: `--wadreq candidate.wad` покажет «взять из doom2d.wad».
+Отсутствие набора спрайтов — код возврата 1 (это `Fatal` при спавне), отсутствие
+глифа — только строка в отчёте.
+
+`--mid2dmm <in.mid> <out.dmm|out.wad>` — конвертер музыки: MIDI (формат 0 и 1) в
+DMM, формат Doom2D. Результат читается тем же загрузчиком, что играет WAD.
+`--muscheck` проверяет круговой путь на встроенном тестовом MIDI, включая длину
+паттерна в тиках.
 
 `--modbuild` / `--modlist` / `--modunpack` — модкит: собрать PK3 из папки,
 посмотреть, что из него загрузится, распаковать обратно.

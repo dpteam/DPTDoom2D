@@ -806,6 +806,323 @@ namespace DPTDOOM2D
             return "";
         }
 
+        /// <summary>
+        /// --wadreq: run the game and record every resource it asks the WAD for.
+        ///
+        /// A replacement data set (FreeDooM2D, AIDooM2D) has to contain everything
+        /// the game demands. That list cannot be written by reading the source — it
+        /// is always one lump short, and the missing one is a Fatal on a player's
+        /// machine. So the list is recorded instead: the game runs every map, the
+        /// lookups are logged, and what was asked for is what a converter must make.
+        /// </summary>
+        public static int WadAudit()
+        {
+            Wad.BeginAudit();
+            ResourceAudit audit = null;
+
+            try
+            {
+                Glob.Reset(Seed);
+                Vga.Init(320, 200);
+                Vga.SetRect(0, 320, 0, 200);
+
+                DGame.TwoPl = false;
+                DGame.Dm = false;
+                DGame.State = DGame.GsGame;
+
+                // Init allocates the fonts, the item sprites, every monster's frames
+                // and the weapon pictures: the bulk of the art is requested here.
+                DGame.Init();
+                World.LoadLightningSounds();
+
+                for (int map = 1; map <= 19; ++map)
+                {
+                    int res = Wad.FindRes(string.Format("MAP{0:00}", map));
+                    if (res < 0) continue;
+
+                    DGame.Map = map;
+                    Player.Reset();
+                    DGame.Start();
+
+                    // A few ticks so the map's music, its sky and the sounds that fire
+                    // on spawn are requested too, not just the lumps the loader reads.
+                    for (int tick = 0; tick < 20; ++tick)
+                    {
+                        Kbd.UpdateScripted(tick);
+                        DGame.Act();
+                    }
+                }
+            }
+            finally
+            {
+                audit = Wad.EndAudit();
+            }
+
+            if (audit == null) return 1;
+
+            string candidate = Config.WadAuditCandidate;
+
+            if (!string.IsNullOrEmpty(candidate))
+            {
+                List<string> names = ReadWadNames(candidate);
+                if (names == null)
+                {
+                    Console.Error.WriteLine("wadreq: не удалось прочитать " + candidate);
+                    return 1;
+                }
+
+                Console.WriteLine(audit.ReportAgainst(names, Path.GetFileName(candidate)));
+                return 0;
+            }
+
+            Console.WriteLine(audit.Report());
+            Console.WriteLine("итого: " + audit.Total + " запрошено, " + audit.Missing + " нет");
+
+            // A missing sprite set is a Fatal the first time the monster spawns, so it
+            // fails the run; missing glyphs are survivable and only get reported.
+            if (audit.MissingSprites > 0)
+            {
+                Console.Error.WriteLine("wadreq: не хватает " + audit.MissingSprites + " наборов спрайтов");
+                return 1;
+            }
+
+            return 0;
+        }
+
+        /// <summary>The lump names in a WAD file, or null when it cannot be read.</summary>
+        private static List<string> ReadWadNames(string path)
+        {
+            try
+            {
+                byte[] data = File.ReadAllBytes(path);
+                if (data.Length < 12) return null;
+                if (data[0] != 'P' && data[0] != 'I') return null;
+                if (data[1] != 'W' || data[2] != 'A' || data[3] != 'D') return null;
+
+                int count = BitConverter.ToInt32(data, 4);
+                int directory = BitConverter.ToInt32(data, 8);
+
+                if (count < 0 || directory < 12 || directory + count * 16 > data.Length) return null;
+
+                var names = new List<string>(count);
+
+                // Latin-1, not ASCII: the fonts in this WAD are named STBF_<byte>, and
+                // the high bytes are real. Decoding them as '?' would report every one
+                // of them as missing.
+                var latin1 = Encoding.GetEncoding(28591);
+
+                for (int i = 0; i < count; ++i)
+                {
+                    int at = directory + i * 16 + 8;
+
+                    int n = 0;
+                    while (n < 8 && data[at + n] != 0) ++n;
+
+                    names.Add(latin1.GetString(data, at, n));
+                }
+
+                return names;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The same comparison the WAD loader uses: up to eight characters, case
+        /// insensitive, a short name padded with NULs.
+        /// </summary>
+        private static bool NameMatches(string a, string b)
+        {
+            for (int i = 0; i < 8; ++i)
+            {
+                char ca = i < a.Length ? a[i] : '\0';
+                char cb = i < b.Length ? b[i] : '\0';
+
+                if (ca >= 'A' && ca <= 'Z') ca = (char)(ca + 32);
+                if (cb >= 'A' && cb <= 'Z') cb = (char)(cb + 32);
+
+                if (ca != cb) return false;
+                if (ca == '\0') return true;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// --mid2dmm &lt;in.mid&gt; &lt;out.dmm|out.wad&gt;: turn a MIDI song into a DMM
+        /// lump this game can play.
+        ///
+        /// The converter is what FreeDooM2D needs: FreeDoom's music is MIDI, Doom2D's
+        /// is DMM, and without this a replacement data set plays in silence.
+        /// </summary>
+        public static int MidiToDmmFile(string input, string output)
+        {
+            if (!File.Exists(input))
+            {
+                Console.Error.WriteLine("mid2dmm: " + input + " не найден");
+                return 1;
+            }
+
+            byte[] midi = File.ReadAllBytes(input);
+
+            string summary;
+            byte[] data = Audio.MidiToDmm.ConvertAndVerify(midi, out summary);
+
+            if (data == null)
+            {
+                Console.Error.WriteLine("mid2dmm: " + Path.GetFileName(input) + ": " + summary);
+                return 1;
+            }
+
+            string lump = Path.GetFileNameWithoutExtension(input).ToUpperInvariant();
+            if (lump.Length > 8) lump = lump.Substring(0, 8);
+
+            if (output.EndsWith(".wad", StringComparison.OrdinalIgnoreCase))
+            {
+                var lumps = new List<KeyValuePair<string, byte[]>>();
+                lumps.Add(new KeyValuePair<string, byte[]>(lump, data));
+
+                if (!Prototypes.WadBuilder.WriteLumps(output, lumps)) return 1;
+            }
+            else
+            {
+                File.WriteAllBytes(output, data);
+            }
+
+            Console.WriteLine("mid2dmm: " + Path.GetFileName(input) + " -> "
+                + Path.GetFileName(output) + " (" + lump + ", " + summary + ")");
+
+            return 0;
+        }
+
+        /// <summary>
+        /// --muscheck: a MIDI file becomes a DMM that the real loader reads back.
+        ///
+        /// The song is built in memory, so the check runs with no files: a tiny
+        /// format-0 MIDI with a tempo and two notes. What it proves is the whole
+        /// chain — parse MIDI, place notes in patterns, write DMM, read it with
+        /// DmmModule — which is exactly the chain FreeDooM2D depends on.
+        /// </summary>
+        public static int MusicConvertCheck()
+        {
+            int failed = 0;
+
+            byte[] midi = BuildTestMidi();
+
+            failed += Check("the test MIDI parses", Audio.MidiFile.Read(midi).Count == 2);
+
+            string summary;
+            byte[] data = Audio.MidiToDmm.ConvertAndVerify(midi, out summary);
+
+            failed += Check("the MIDI converts and reads back", data != null);
+
+            if (data != null)
+            {
+                XmModule module = Audio.DmmModule.Load(data, null);
+
+                failed += Check("the song has a pattern", module != null && module.Patterns.Length > 0);
+                failed += Check("the order list loops", module != null && module.Length > 0);
+
+                // The notes have to be there, not just the structure: a converter
+                // that writes valid but empty patterns would pass everything else.
+                bool found = false;
+
+                if (module != null)
+                {
+                    for (int p = 0; p < module.Patterns.Length && !found; ++p)
+                    {
+                        byte[] note = module.Patterns[p].Note;
+
+                        for (int i = 0; i < note.Length; ++i)
+                            if (note[i] > 0 && note[i] < 97) { found = true; break; }
+                    }
+                }
+
+                failed += Check("the notes survive the round trip", found);
+
+                // Timing is the part that broke first: a delay of 0 means 256 ticks
+                // in this format, and a writer that gets that wrong pushes every note
+                // a pattern late. Two quarter notes at 120 bpm are 64 ticks.
+                XmModule check = module;
+                bool lengthOk = check != null && check.Patterns.Length == 1
+                    && check.Patterns[0].Rows == 64;
+
+                failed += Check("the pattern is 64 ticks long", lengthOk);
+
+                bool firstNote = false, secondNote = false;
+
+                if (check != null && check.Patterns.Length > 0)
+                {
+                    byte[] note = check.Patterns[0].Note;
+                    int channels = check.ChannelCount;
+
+                    // Row 0, channel 0; row 32, channel 0.
+                    if (note.Length > 0 && note[0] > 0 && note[0] < 97) firstNote = true;
+                    if (note.Length > 32 * channels && note[32 * channels] > 0
+                        && note[32 * channels] < 97) secondNote = true;
+                }
+
+                failed += Check("the first note starts on tick 0", firstNote);
+                failed += Check("the second note starts on tick 32", secondNote);
+
+                Console.WriteLine("  notes=" + Audio.MidiFile.Read(midi).Count
+                    + " patterns=" + module.Patterns.Length
+                    + " rows=" + module.Patterns[0].Rows
+                    + " order=" + module.Length
+                    + " bytes=" + data.Length);
+            }
+
+            Console.WriteLine(failed == 0
+                ? "music: MIDI -> DMM round trip ok"
+                : "music: " + failed + " check(s) failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// A minimal format-0 MIDI: 120 bpm, two quarter notes on channel 0.
+        ///
+        /// Written by hand rather than shipped as a file, so the check cannot drift
+        /// away from the parser: this is the smallest thing the parser must accept.
+        /// </summary>
+        private static byte[] BuildTestMidi()
+        {
+            var track = new List<byte>();
+
+            // Tempo: 500000 microseconds per quarter, the MIDI default of 120 bpm.
+            track.AddRange(new byte[] { 0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20 });
+
+            // C-4 on, a quarter later off.
+            track.AddRange(new byte[] { 0x00, 0x90, 0x3C, 0x64 });
+            track.AddRange(new byte[] { 0x83, 0x60, 0x80, 0x3C, 0x00 });
+
+            // E-4, same length.
+            track.AddRange(new byte[] { 0x00, 0x90, 0x40, 0x64 });
+            track.AddRange(new byte[] { 0x83, 0x60, 0x80, 0x40, 0x00 });
+
+            track.AddRange(new byte[] { 0x00, 0xFF, 0x2F, 0x00 });
+
+            var data = new List<byte>();
+
+            data.AddRange(new byte[] { (byte)'M', (byte)'T', (byte)'h', (byte)'d' });
+            data.AddRange(new byte[] { 0, 0, 0, 6 });
+            data.AddRange(new byte[] { 0, 0 });             // format 0
+            data.AddRange(new byte[] { 0, 1 });             // one track
+            data.AddRange(new byte[] { 0x01, 0xE0 });       // 480 ticks per quarter
+
+            data.AddRange(new byte[] { (byte)'M', (byte)'T', (byte)'r', (byte)'k' });
+            data.Add((byte)(track.Count >> 24));
+            data.Add((byte)((track.Count >> 16) & 0xFF));
+            data.Add((byte)((track.Count >> 8) & 0xFF));
+            data.Add((byte)(track.Count & 0xFF));
+
+            data.AddRange(track);
+
+            return data.ToArray();
+        }
+
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
         private static bool Type(string text)
         {
