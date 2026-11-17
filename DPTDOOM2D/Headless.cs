@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using DPTDOOM2D.Engine;
@@ -432,6 +433,137 @@ namespace DPTDOOM2D
         {
             if (!ok) Console.WriteLine("  " + name + ": FAILED");
             return ok ? 0 : 1;
+        }
+
+        /// <summary>
+        /// --actorcheck: parses the built-in actor definitions and compares them
+        /// with the frozen 1996 tables.
+        ///
+        /// This is the check that keeps "data instead of code" honest. The engine
+        /// no longer reads mnsz and the nine animation arrays from C#; it parses
+        /// actors.txt-style data. A typo in that data would give a monster the
+        /// wrong hit points and nothing would notice — this does.
+        ///
+        /// Also runs the parser over a set of deliberately broken snippets and
+        /// insists that each one produces the expected error code, because a
+        /// language that fails silently is worse than no language.
+        /// </summary>
+        public static int ActorCheck()
+        {
+            int failed = 0;
+
+            Actors.Load();
+
+            if (Actors.Errors.Count > 0)
+            {
+                for (int i = 0; i < Actors.Errors.Count; ++i)
+                    Console.WriteLine("  " + Actors.Errors[i]);
+                Console.WriteLine("  built-in actor data has " + Actors.Errors.Count + " problem(s)");
+                ++failed;
+            }
+
+            var problems = new List<string>();
+            int differences = ActorReference.Compare(problems);
+
+            for (int i = 0; i < problems.Count; ++i)
+                Console.WriteLine("  " + problems[i]);
+
+            if (differences > 0)
+            {
+                Console.WriteLine("  actor data differs from monster.c in " + differences + " place(s)");
+                ++failed;
+            }
+
+            failed += ParserChecks();
+
+            Console.WriteLine(failed == 0
+                ? "actors: 20 built-in types match monster.c, parser ok"
+                : "actors: " + failed + " check(s) failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>One valid definition and a list of broken ones with the code each must produce.</summary>
+        private static int ParserChecks()
+        {
+            int failed = 0;
+
+            failed += ExpectActor("a valid definition parses",
+                @"actor Imp2
+                  {
+                      radius 10  height 28  health 40
+                      sprite TROO  frames 42
+                      sound death DSIMPDTH
+                      states { spawn: AAABBB   see: AABBCCDD }
+                  }", 1, null);
+
+            failed += ExpectActor("an unknown property is E101",
+                "actor X { wobble 3 }", 1, "E101");
+
+            failed += ExpectActor("an unknown state is E102",
+                "actor X { states { flying: AA } }", 1, "E102");
+
+            failed += ExpectActor("a missing value is E103",
+                "actor X { health }", 1, "E103");
+
+            failed += ExpectActor("a missing brace is E104",
+                "actor X { states { spawn: AA }", 1, "E104");
+
+            failed += ExpectActor("inheritance is refused with E105",
+                "actor X : Imp { health 1 }", 1, "E105");
+
+            failed += ExpectActor("an unknown sound slot is E106",
+                "actor X { sound roar DSFOO }", 1, "E106");
+
+            failed += Check("an unknown actor name is not a built-in type",
+                Actors.IndexOf("Nosuchmonster") == 0 && Actors.IndexOf("imp") == 2);
+
+            failed += ExpectActor("a lowercase frame letter is E109",
+                "actor X { states { spawn: Ab } }", 1, "E109");
+
+            failed += ExpectActor("a comment is not a token",
+                "// actor Y { health 1 }\nactor X { health 2 }", 1, null);
+
+            // Sprites that mean "draw nothing" are legal and must not be reported.
+            failed += ExpectActor("sprite TNT1 is accepted",
+                "actor X { sprite TNT1 states { spawn: A } }", 1, null);
+            failed += ExpectActor("sprite NULL is accepted",
+                "actor X { sprite NULL states { spawn: A } }", 1, null);
+            failed += ExpectActor("sprite ---- is accepted",
+                "actor X { sprite \"----\" states { spawn: A } }", 1, null);
+
+            failed += ExpectActor("renderstyle fuzz is accepted",
+                "actor X { sprite TROO renderstyle fuzz states { spawn: A } }", 1, null);
+            failed += ExpectActor("renderstyle add is refused with E106",
+                "actor X { renderstyle add }", 1, "E106");
+
+            return failed;
+        }
+
+        private static int ExpectActor(string what, string text, int actors, string code)
+        {
+            var errors = new List<string>();
+            List<ActorDef> parsed = ActorParser.Parse(text, "test", errors);
+
+            if (parsed.Count != actors)
+            {
+                Console.WriteLine("  " + what + ": parsed " + parsed.Count + " actor(s), expected " + actors);
+                return 1;
+            }
+
+            if (code == null)
+            {
+                if (errors.Count == 0) return 0;
+                Console.WriteLine("  " + what + ": unexpected " + errors[0]);
+                return 1;
+            }
+
+            for (int i = 0; i < errors.Count; ++i)
+                if (errors[i].IndexOf(code, StringComparison.Ordinal) >= 0) return 0;
+
+            Console.WriteLine("  " + what + ": expected " + code
+                + ", got " + (errors.Count == 0 ? "no error" : errors[0]));
+            return 1;
         }
 
         /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>

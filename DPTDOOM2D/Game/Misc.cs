@@ -156,6 +156,14 @@ namespace DPTDOOM2D.Game
             if (dir) Vga.ManSpr2(sx, sy, p, color); else Vga.ManSpr(sx, sy, p, color);
         }
 
+        /// <summary>DrawSpr with the "fuzz" render style: a stippled, ghostly sprite.</summary>
+        public static void DrawSprFuzz(int x, int y, VgaImage p, bool dir)
+        {
+            int sx = x - World.WX + World.WD / 2;
+            int sy = y - World.WY + World.HT / 2 + 1 + World.WO;
+            Vga.FuzzSpr(sx, sy, p, dir ? 1 : 0);
+        }
+
         /// <summary>Z_clrst: the stone panel behind the status bar.</summary>
         public static void ClrSt()
         {

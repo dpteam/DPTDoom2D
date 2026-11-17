@@ -162,6 +162,49 @@ namespace DPTDOOM2D.Engine
             DrawSpr(x, y, i, 1, 0);
         }
 
+        /// <summary>
+        /// The "fuzz" render style: Doom's spectre look, done the 8-bit way.
+        ///
+        /// The original renderer stippled the sprite with a fixed pattern so it
+        /// read as translucent without needing a blend table. A checkerboard is
+        /// the same idea, is deterministic, and works with or without a WAD — a
+        /// MIXMAP blend would not, because the table ships in the WAD.
+        /// </summary>
+        public static void FuzzSpr(int x, int y, VgaImage i, int d)
+        {
+            if (i == null) return;
+
+            x += offx;
+            y += offy;
+            if ((d & 1) != 0) x = x - i.W + i.SX; else x -= i.SX;
+            if ((d & 2) != 0) y = y - i.H + i.SY; else y -= i.SY;
+
+            if (!(x + i.W >= cx1 && x <= cx2 && y + i.H >= cy1 && y <= cy2)) return;
+
+            byte[] px = i.Pixels;
+            for (int ly = 0; ly < i.H; ++ly)
+            {
+                int ry = (d & 2) != 0 ? (i.H - ly - 1) : ly;
+                int srcRow = ly * i.W;
+                int dstRow = y + ry;
+
+                for (int lx = 0; lx < i.W; ++lx)
+                {
+                    byte t = px[srcRow + lx];
+                    if (t == 0) continue;
+
+                    int rx = (d & 1) != 0 ? (i.W - lx - 1) : lx;
+                    int sx = x + rx;
+
+                    // Every other pixel: the sprite reads as a ghost while its
+                    // silhouette stays the same, which is what a spectre is.
+                    if (((sx + dstRow) & 1) != 0) continue;
+
+                    PutPixel(sx, dstRow, t);
+                }
+            }
+        }
+
         /// <summary>V_manspr: a "man" sprite with the player colour remap.</summary>
         public static void ManSpr(int x, int y, VgaImage i, int c)
         {

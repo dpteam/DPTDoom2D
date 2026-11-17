@@ -220,6 +220,7 @@ dptdoom2d.exe -net join -master 1.2.3.4:25145 -relay-session <id>
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | слои, нативный Win32-слой, соответствие модулей C → C# |
 | [docs/FORMATS.md](docs/FORMATS.md) | WAD, спрайты, карты, сохранения, DMI, XM, DMM |
+| [docs/ACTORS.md](docs/ACTORS.md) | язык акторов `actors.txt`: свойства, состояния, ошибки |
 | [docs/MAPS.md](docs/MAPS.md) | кастомные карты, библиотека паков, редактор |
 | [docs/MODS.md](docs/MODS.md) | модкит: PK3, сборка, установка |
 | [docs/PROTOTYPES.md](docs/PROTOTYPES.md) | витрина прототипов: что перенесено и как |

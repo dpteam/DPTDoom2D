@@ -95,6 +95,11 @@ namespace DPTDOOM2D
                 }
                 if (args[i] == "--controls")
                     return Headless.ControlsCheck();
+                if (args[i] == "--actorcheck")
+                {
+                    Boot();
+                    return Headless.ActorCheck();
+                }
                 if (args[i] == "--modbuild" && i + 2 < args.Length)
                 {
                     var inputs = new string[args.Length - i - 2];
@@ -212,6 +217,11 @@ namespace DPTDOOM2D
             Wad.InitWads();
             Palette.Load();
             Palette.SetGamma(Config.Gamma);
+
+            // Actor data comes from WAD lumps (a PK3 ships actors.txt as a loose
+            // file), so it is read after the WADs are open and before anything
+            // builds a sprite table.
+            Actors.Load();
         }
 
         /// <summary>
@@ -330,6 +340,14 @@ namespace DPTDOOM2D
                 {
                     Wad.AddWadFromBytes(Path.GetFileName(path) + ":" + entry.Name, payload);
                     ++wads;
+                }
+                else if (string.Equals(name, "actors.txt", StringComparison.OrdinalIgnoreCase))
+                {
+                    // The actor language is a loose text file, not a WAD lump, so
+                    // it is renamed to the lump name the registry looks for. A mod
+                    // ships it as actors.txt; nothing else has to know.
+                    Wad.AddLumpFromBytes("ACTORDEF", payload);
+                    ++lumps;
                 }
                 else if (ext == ".lmp" || ext == ".vgaimg" || ext == ".dmi" || ext == ".dmm")
                 {

@@ -53,83 +53,52 @@ namespace DPTDOOM2D.Game
         /// <summary>z_mon: monsters are moving, so traps block them.</summary>
         public static bool ZMon;
 
-        static readonly MnSz[] mnsz = BuildSizes();
+        static MnSz[] mnszCache;
 
+        /// <summary>
+        /// Sizes, built on first use rather than in a static field initialiser: the
+        /// data comes from Actors, which is only loaded once the WADs are open, and
+        /// a field initialiser would snapshot the empty table if anything touched
+        /// this class earlier.
+        /// </summary>
+        static MnSz[] mnsz
+        {
+            get
+            {
+                if (mnszCache == null) mnszCache = BuildSizes();
+                return mnszCache;
+            }
+        }
+
+        /// <summary>
+        /// Sizes come from <see cref="Actors"/>, which parses the same data a mod
+        /// can override. The array is one longer than the type count so that a type
+        /// can index it directly, exactly like mnsz in monster.c.
+        /// </summary>
         static MnSz[] BuildSizes()
         {
-            // rad  ht  life  pain  rv  jv  slop  min_pain
-            int[][] d = {
-                new[] {  0,  0,    0,    0,  0,  0,    0,    0 }, // none
-                new[] { 15, 28,   60,   20,  7, 10,    0,   10 }, // demon
-                new[] { 10, 28,   25,   15,  3, 10,   30,    0 }, // imp
-                new[] { 10, 28,   15,   10,  3, 10,   30,    0 }, // zomby
-                new[] { 10, 28,   20,   10,  3, 10,   30,    0 }, // sergeant
-                new[] { 20, 55,  500,   70,  5, 10,    0,   50 }, // cyberdemon
-                new[] { 12, 28,   60,   20,  3, 10,   30,   10 }, // chaingunner
-                new[] { 12, 32,  150,   40,  3, 10,    0,   30 }, // baron of hell
-                new[] { 12, 32,   75,   40,  3, 10,    0,   30 }, // hell knight
-                new[] { 15, 28,  100,   10,  4,  4,    0,    0 }, // cacodemon
-                new[] {  8, 18,   60,   10,  4,  4,    0,    0 }, // lost soul
-                new[] { 15, 28,  100,   10,  4,  4,    0,    0 }, // pain elemental
-                new[] { 64, 50,  500,   70,  4, 10,    0,   50 }, // spider mastermind
-                new[] { 25, 27,  150,   20,  4, 10,    0,    0 }, // arachnotron
-                new[] { 18, 30,  200,   40,  3,  7,    0,   20 }, // mancubus
-                new[] { 17, 36,  200,   40,  6, 11,    0,   20 }, // revenant
-                new[] { 17, 36,  150,   30,  7, 12,    0,   10 }, // archvile
-                new[] {  5,  5,   35,   20, 14,  6,    0,   10 }, // fish
-                new[] {  5, 17,   20,    0,  7,  6,    0,    0 }, // barrel
-                new[] { 17, 38,   20,   40,  3,  6,    0,   20 }, // robot
-                new[] {  8, 26,  400,   70,  8, 10,   30,   50 }  // man
-            };
-            MnSz[] t = new MnSz[d.Length];
-            for (int i = 0; i < d.Length; ++i)
-                t[i] = new MnSz { R = d[i][0], H = d[i][1], L = d[i][2], Mp = d[i][3], Rv = d[i][4], Jv = d[i][5], Sp = d[i][6], MinP = d[i][7] };
+            Actors.Load();
+
+            var t = new MnSz[Actors.TypeCount + 1];
+
+            for (int i = 0; i <= Actors.TypeCount; ++i)
+            {
+                Actors.Size s = Actors.Sizes[i];
+                t[i] = new MnSz { R = s.R, H = s.H, L = s.L, Mp = s.Mp, Rv = s.Rv, Jv = s.Jv, Sp = s.Sp, MinP = s.MinP };
+            }
+
             return t;
         }
 
-        static readonly string[] sleepAnim = {
-            "AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB",
-            "A","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB","AAABBB",
-            "A","A","AAABBB"
-        };
-        static readonly string[] goAnim = {
-            "AABBCCDD","AABBCCDD","AABBDDAACCDD","AABBDDAACCDD","AABBDDCCDDBB",
-            "AABBDDAACCDD","AABBCCDD","AABBCCDD","A","AABB","AABBCCBB",
-            "AABBCCDDEEFF","AABBCCDDEEFF","AABBCCDDEEFF","AABBCCDDEEFF","AABBCCDDEEFF",
-            "AABB","A","DDEEFFGGHHIIJJKKLLAABBCC","ACDABD"
-        };
-        static readonly string[] painAnim = {
-            "H","H","G","G","G","G","H","H","F","E","G","I","I","J","L","Q","EECCDDCC",
-            "A","D","G"
-        };
-        static readonly string[] waitAnim = {
-            "A","A","A","A","A","A","A","A","A","AABB","A","A","A","I","K","A","A",
-            "A","D","E"
-        };
-        static readonly string[] attackAnim = {
-            "EEFFGG","EEFFGG","EEEEEF","EEEEEF","EEEEEF","EF","EEFFGG","EEFFGG",
-            "BBCCDD","CCDD","DDEEFF","GH","GH","GGGGHH","GGHHII",
-            "QQGGGHHHIIJJKKLLMMNNOOPP","BBFFAA","A","OOPPQQ","EEEEFF"
-        };
-        static readonly string[] dieAnim = {
-            "IIIJJJKKKLLLMMM","IIIJJJKKKLLL","HHHIIIJJJKKK","HHHIIIJJJKKK",
-            "HHHIIIJJJKKKLLLMMMNNNOOO","HHHIIIJJJKKKLLLMMM",
-            "IIIJJJKKKLLLMMMNNN","IIIJJJKKKLLLMMMNNN","GGGHHHIIIJJJKKK",
-            "FFFGGGHHHIIIJJJKKK","HHHIIIJJJKKKLLLMMM",
-            "JJJJKKKKLLLLMMMMNNNNOOOOPPPPQQQQRRRR","JJJKKKLLLMMMNNNOOO",
-            "KKKLLLMMMNNNOOOPPPRRRSSS","MMMNNNOOOPPP","RRRSSSTTTUUUVVVWWWXXXYYY",
-            "DDDD","CCCDDDEEEFFFGGG","D","HHHHIIIIJJJJKKKKLLLLMMMM"
-        };
-        static readonly string[] slopAnim = {
-            "","NNNOOOPPPRRRSSSTTT","MMMNNNOOOPPPRRRSSSTTT","MMMNNNOOOPPPRRRSSSTTT","",
-            "OOOPPPQQQRRRSSS","","","","","","","","","","","","","","OOPPQQRRSSTTUUVV"
-        };
-        static readonly string[] deadAnim = {
-            "N","M","L","L","P","N","O","O","L","","","S","P","T","Q","Z","C","","D","N"
-        };
-        static readonly string[] messAnim = {
-            "","U","U","U","","T","","","","","","","","","","","","","","W"
-        };
+        /// <summary>Frame string of a state for a monster type, with monster.c's 1-based types.</summary>
+        static string Anim(int t, int label)
+        {
+            return Actors.AnimOf(t + 1, label);
+        }
+
+        // The nine animation tables that used to live here (sleepAnim, goAnim, ...)
+        // are now data: see Actors.Builtin and docs/ACTORS.md. AnimIndex keeps the
+        // same numbering so that a save written before the change still loads.
 
         static Monsters()
         {
@@ -163,17 +132,15 @@ namespace DPTDOOM2D.Game
         {
             // The save format stores a pointer; here the animation is identified by
             // its text, so a loaded game can rebuild the same frame sequence.
+            //
+            // The numbering is the one the old nine arrays used (1 spawn, 2 see,
+            // 3 pain, 4 wait, 5 melee, 6 death, 7 slop, 8 dead, 9 mess), so a save
+            // written before the tables became data still loads. Missile states are
+            // not in that numbering and keep their own codes.
             for (int t = 0; t < MnTn; ++t)
             {
-                if (ap == sleepAnim[t]) return t * 10 + 1;
-                if (ap == goAnim[t]) return t * 10 + 2;
-                if (ap == painAnim[t]) return t * 10 + 3;
-                if (ap == waitAnim[t]) return t * 10 + 4;
-                if (ap == attackAnim[t]) return t * 10 + 5;
-                if (ap == dieAnim[t]) return t * 10 + 6;
-                if (ap == slopAnim[t]) return t * 10 + 7;
-                if (ap == deadAnim[t]) return t * 10 + 8;
-                if (ap == messAnim[t]) return t * 10 + 9;
+                for (int l = 0; l < 9; ++l)
+                    if (ap == Anim(t, l)) return t * 10 + l + 1;
             }
             if (ap == "KKKKJJ") return 1001;
             if (ap == "MN") return 1002;
@@ -189,18 +156,7 @@ namespace DPTDOOM2D.Game
             if (v < 0) return "";
             int t = v / 10, k = v % 10;
             if (t < 0 || t >= MnTn) return "";
-            switch (k)
-            {
-                case 1: return sleepAnim[t];
-                case 2: return goAnim[t];
-                case 3: return painAnim[t];
-                case 4: return waitAnim[t];
-                case 5: return attackAnim[t];
-                case 6: return dieAnim[t];
-                case 7: return slopAnim[t];
-                case 8: return deadAnim[t];
-                case 9: return messAnim[t];
-            }
+            if (k >= 1 && k <= 9) return Anim(t, k - 1);
             return "";
         }
 
@@ -227,36 +183,10 @@ namespace DPTDOOM2D.Game
 
         public static void Alloc()
         {
-            string[][] sn = {
-                new[]{"DMACT","DMPAIN","SGTATK","SGTSIT","SGTDTH"},
-                new[]{"BGACT","POPAIN","CLAW","",""},
-                new[]{"POSACT","POPAIN","","",""},
-                new[]{"POSACT","POPAIN","","",""},
-                new[]{"","DMPAIN","HOOF","CYBSIT","CYBDTH"},
-                new[]{"POSACT","POPAIN","","",""},
-                new[]{"","DMPAIN","","BRSSIT","BRSDTH"},
-                new[]{"","DMPAIN","","KNTSIT","KNTDTH"},
-                new[]{"DMACT","DMPAIN","","CACSIT","CACDTH"},
-                new[]{"DMACT","DMPAIN","SKLATK","SKLATK","FIRXPL"},
-                new[]{"DMACT","PEPAIN","","PESIT","PEDTH"},
-                new[]{"","DMPAIN","METAL","SPISIT","SPIDTH"},
-                new[]{"BSPACT","DMPAIN","BSPWLK","BSPSIT","BSPDTH"},
-                new[]{"DMACT","MNPAIN","MANATK","MANSIT","MANDTH"},
-                new[]{"SKEACT","POPAIN","SKEATK","SKESIT","SKEDTH"},
-                new[]{"VILACT","VIPAIN","VILATK","VILSIT","VILDTH"},
-                new[]{"","","BITE1","",""},
-                new[]{"","","","","BAREXP"},
-                new[]{"BSPACT","","BSPWLK","BSPSIT","BSPDTH"},
-                new[]{"HAHA1","PLPAIN","","STOP1","PDIEHI"}
-            };
-            string[] msn = {
-                "SARG","TROO","POSS","SPOS","CYBR","CPOS","BOSS","BOS2","HEAD","SKUL",
-                "PAIN","SPID","BSPI","FATT","SKEL","VILE","FISH","BAR1","ROBO","PLAY"
-            };
-            int[] mms = {
-                14*2,21*2,21*2,21*2,16*2,20*2,15*2,15*2,12*2,11*2,13*2,19*2,16*2,
-                20*2,17*2,29*2,6*2,2*2,17*2,23*2
-            };
+            // Sprite sets, sounds and frame counts are data now: Actors parses the
+            // built-in definitions and any actors.txt the player installed. The
+            // engine only decides where each frame goes.
+            Actors.Load();
 
             sgun = new VgaImage[2];
             sgun[0] = Res.Img(Wad.GetSprId("PWP4", 0, 1));
@@ -270,17 +200,29 @@ namespace DPTDOOM2D.Game
             {
                 spr[j] = new VgaImage[29 * 2];
                 sprd[j] = new byte[29 * 2];
-                snd[j] = new Res.Locked[5];
+                snd[j] = new Res.Locked[Actors.SoundCount];
 
-                for (int i = 0; i < mms[j]; ++i)
-                    spr[j][i] = Misc.GetSpr(msn[j], i / 2, (i & 1) + 1, sprd[j], i);
+                string sprite = Actors.Sprite[j];
+                int frames = Actors.Frames[j];
+                if (frames > 29 * 2) frames = 29 * 2;
+
+                // An invisible actor loads nothing: the sprite table stays null and
+                // the renderer skips it, but the monster still exists and moves.
+                if (!Actors.Hidden[j] && sprite.Length != 0)
+                {
+                    for (int i = 0; i < frames; ++i)
+                        spr[j][i] = Misc.GetSpr(sprite, i / 2, (i & 1) + 1, sprd[j], i);
+                }
 
                 if (j == MnBarrel - 1)
                     for (int i = 4; i < 14; ++i)
                         spr[j][i] = Misc.GetSpr("BEXP", i / 2 - 2, (i & 1) + 1, sprd[j], i);
 
-                for (int i = 0; i < 5; ++i)
-                    snd[j][i] = sn[j][i].Length != 0 ? Misc.GetSnd(sn[j][i]) : null;
+                for (int i = 0; i < Actors.SoundCount; ++i)
+                {
+                    string lump = Actors.Sound[j][i];
+                    snd[j][i] = lump != null && lump.Length != 0 ? Misc.GetSnd(lump) : null;
+                }
             }
 
             fspr = new VgaImage[8];
@@ -338,31 +280,27 @@ namespace DPTDOOM2D.Game
 
             switch (st)
             {
-                case Sleep: a = sleepAnim[t]; break;
-                case Pain: a = painAnim[t]; break;
-                case Wait: a = waitAnim[t]; break;
+                case Sleep: a = Anim(t, Actors.LblSpawn); break;
+                case Pain: a = Anim(t, Actors.LblPain); break;
+                case Wait: a = Anim(t, Actors.LblWait); break;
                 case Climb:
                 case Run:
                 case RunOut:
-                case Go: a = goAnim[t]; break;
-                case ShootSt:
-                    if (t == MnSkel - 1) { a = "KKKKJJ"; break; }
-                    if (t == MnRobo - 1) { a = "MN"; break; }
-                    goto case Attack;
-                case Attack:
-                    a = attackAnim[t];
-                    if (st == Attack && t == MnVile - 1) a = "[[\\\\]]";
-                    break;
+                case Go: a = Anim(t, Actors.LblSee); break;
+                case ShootSt: a = Anim(t, Actors.LblMissile); break;
+                case Attack: a = Anim(t, Actors.LblMelee); break;
                 case Die:
+                    // Map 9 is the boss level: the spider mastermind's death cue is
+                    // the little "pauk" scream, exactly as monster.c has it.
                     if (Game.Map == 9 && t == MnBsp - 1) Misc.Sound(pauksnd, 128);
-                    a = dieAnim[t]; break;
+                    a = Anim(t, Actors.LblDeath); break;
                 case Dead:
-                    a = deadAnim[t];
-                    if (mn[i].Ap == slopAnim[t]) a = messAnim[t];
+                    a = Anim(t, Actors.LblDead);
+                    if (mn[i].Ap == Anim(t, Actors.LblSlop)) a = Anim(t, Actors.LblMess);
                     if (t == MnBarrel - 1) mn[i].T = 0;
                     break;
                 case Revive:
-                    a = mn[i].Ap == messAnim[t] ? slopAnim[t] : dieAnim[t];
+                    a = mn[i].Ap == Anim(t, Actors.LblMess) ? Anim(t, Actors.LblSlop) : Anim(t, Actors.LblDeath);
                     mn[i].Ac = a.Length - 1;
                     mn[i].O.R = mnsz[t + 1].R; mn[i].O.H = mnsz[t + 1].H;
                     mn[i].Life = mnsz[t + 1].L; mn[i].Ammo = mn[i].Pain = 0;
@@ -1079,16 +1017,35 @@ namespace DPTDOOM2D.Game
 
                 if ((mn[i].T != MnSoul && mn[i].T != MnPain) || mn[i].St != Dead)
                 {
+                    int type = mn[i].T - 1;
                     char c = ApAt(mn[i], mn[i].Ac);
                     int idx = (c - 'A') * 2 + mn[i].D;
 
-                    if (mn[i].T != MnMan)
-                        Misc.DrawSpr(mn[i].O.X, mn[i].O.Y, spr[mn[i].T - 1][idx], sprd[mn[i].T - 1][idx] != 0);
-                    else
+                    // Render style and translation are data now: a mod can hide an
+                    // actor or stipple it, and the corpse's colour is a property
+                    // rather than a constant in this method.
+                    if (Actors.Style[type] != Actors.StyleInvisible)
                     {
-                        if (c == 'E' || c == 'F')
-                            Misc.DrawSpr(mn[i].O.X, mn[i].O.Y, sgun[c - 'E'], mn[i].D != 0);
-                        Misc.DrawManSpr(mn[i].O.X, mn[i].O.Y, spr[mn[i].T - 1][idx], sprd[mn[i].T - 1][idx] != 0, ManColor);
+                        bool fuzz = Actors.Style[type] == Actors.StyleFuzz;
+                        int translation = Actors.Translation[type];
+
+                        if (mn[i].T != MnMan)
+                        {
+                            if (fuzz)
+                                Misc.DrawSprFuzz(mn[i].O.X, mn[i].O.Y, spr[type][idx], sprd[type][idx] != 0);
+                            else if (translation != 0)
+                                Misc.DrawManSpr(mn[i].O.X, mn[i].O.Y, spr[type][idx],
+                                    sprd[type][idx] != 0, (byte)translation);
+                            else
+                                Misc.DrawSpr(mn[i].O.X, mn[i].O.Y, spr[type][idx], sprd[type][idx] != 0);
+                        }
+                        else
+                        {
+                            if (c == 'E' || c == 'F')
+                                Misc.DrawSpr(mn[i].O.X, mn[i].O.Y, sgun[c - 'E'], mn[i].D != 0);
+                            Misc.DrawManSpr(mn[i].O.X, mn[i].O.Y, spr[type][idx],
+                                sprd[type][idx] != 0, (byte)(translation != 0 ? translation : ManColor));
+                        }
                     }
                 }
 
@@ -1172,7 +1129,7 @@ namespace DPTDOOM2D.Game
                     {
                         case MnImp: case MnZomby: case MnSerg: case MnCGun:
                         case MnMan:
-                            mn[n].Ap = slopAnim[mn[n].T - 1];
+                            mn[n].Ap = Anim(mn[n].T - 1, Actors.LblSlop);
                             Misc.Sound(slopsnd, 128);
                             break;
                         case MnBsp:

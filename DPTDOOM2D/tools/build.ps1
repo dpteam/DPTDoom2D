@@ -158,6 +158,12 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  controls FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  controls ok' -ForegroundColor DarkGray }
 
+		# Actor language: the built-in data has to equal monster.c, and the parser
+		# has to reject broken files with the documented codes.
+		& $exe --actorcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  actors FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  actors ok' -ForegroundColor DarkGray }
+
 		# Mod kit: build a PK3 out of a map pack, list it, and load it back. This is
 		# the whole mod workflow in one round trip.
 		$modSrc = Join-Path $tmp 'modsrc'
@@ -178,6 +184,16 @@ try
 
 			& $exe -file $modPk3 --simulate 40 (Join-Path $tmp 'mod.bmp') 1 2>&1 | Out-Null
 			if ($LASTEXITCODE -ne 0) { Write-Host '  pk3 load FAILED' -ForegroundColor Red; $failed++ }
+
+			# A mod that ships actors.txt has to reach the actor registry through
+			# the same PK3 path, or the language only works for loose files.
+			Set-Content (Join-Path $modSrc 'actors.txt') 'actor Zombie { health 500 }' -Encoding ASCII
+			Remove-Item $modPk3 -Force -ErrorAction SilentlyContinue
+			& $exe --modbuild $modPk3 $modSrc 2>&1 | Out-Null
+			$output = & $exe -file $modPk3 --simulate 10 (Join-Path $tmp 'actmod.bmp') 1 2>&1 | Out-String
+			if ($LASTEXITCODE -ne 0 -or $output -notmatch 'wad:ACTORDEF') {
+				Write-Host '  actors in pk3 FAILED' -ForegroundColor Red; $failed++
+			}
 			else { Write-Host '  mod kit ok' -ForegroundColor DarkGray }
 		}
 
