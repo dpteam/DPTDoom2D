@@ -3,7 +3,9 @@ param(
     [string]$Out = "$env:TEMP\shot.png",
     [string]$WindowTitle = "DPT.DOOM 2D",
     [int]$DelayMs = 600,
-    [string]$Keys = ""
+    [string]$Keys = "",
+    [int]$Width = 0,
+    [int]$Height = 0
 )
 
 <#
@@ -12,6 +14,9 @@ param(
     Keys is a comma-separated list like "F2" or "Down,Down,Right". Each entry is
     pressed for ~60 ms, which is longer than one 50 ms game tick, so the game
     sees exactly one press — the same as a human tap.
+
+    Width and Height resize the window first, which is how the docs capture the
+    whole launcher page instead of the part that fits its default window.
 #>
 
 Add-Type -AssemblyName System.Drawing
@@ -71,6 +76,12 @@ $h = [DptKey]::FindByTitle($WindowTitle, [uint32]$proc.Id)
 if ($h -eq [IntPtr]::Zero) { Write-Error "window not found"; exit 1 }
 
 [DptKey]::ShowWindow($h, 5) | Out-Null
+
+if ($Width -gt 0 -and $Height -gt 0) {
+    [DptKey]::SetWindowPos($h, [IntPtr]::Zero, 40, 20, $Width, $Height, 0x0004) | Out-Null
+    Start-Sleep -Milliseconds 500
+}
+
 [DptKey]::SetWindowPos($h, [IntPtr]::new(-1), 0, 0, 0, 0, 0x0001 -bor 0x0002) | Out-Null
 [DptKey]::SetForegroundWindow($h) | Out-Null
 [DptKey]::SetFocus($h) | Out-Null

@@ -24,4 +24,15 @@
     <ProjectReference Include="..\DPTDOOM2D.Shared\DPTDOOM2D.Shared.csproj" />
   </ItemGroup>
 
+  <!--
+    The launcher's interface is real HTML/CSS/JS rendered by the WebBrowser
+    control (MSHTML), the same approach DPT.DOOM uses: no extra dependency, and
+    the layout lives in files a designer can edit.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\ui.html" />
+    <EmbeddedResource Include="Assets\theme.css" />
+    <EmbeddedResource Include="Assets\app.js" />
+  </ItemGroup>
+
 </Project>

@@ -23,7 +23,13 @@ namespace DPTDOOM2D.Engine
     /// </summary>
     public static class Log
     {
-        /// <summary>Where the log files go: &lt;exe&gt;/Logs.</summary>
+        /// <summary>
+        /// Where the log files go: &lt;exe&gt;/Storage/Logs.
+        ///
+        /// Everything the game writes for itself — logs, screenshots, the launcher
+        /// page — lives under Storage, so a copy of the game folder has one
+        /// directory that is safe to delete and one that is not.
+        /// </summary>
         public static string Directory { get; private set; }
 
         /// <summary>The file for this run, or null when logging is off.</summary>
@@ -38,7 +44,7 @@ namespace DPTDOOM2D.Engine
 
             try
             {
-                Directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                Directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Storage", "Logs");
                 System.IO.Directory.CreateDirectory(Directory);
 
                 FilePath = Path.Combine(Directory,

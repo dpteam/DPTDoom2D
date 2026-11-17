@@ -200,6 +200,83 @@ namespace DPTDOOM2D
         }
 
         /// <summary>
+        /// --cheats: types every original cheat and checks the effect.
+        ///
+        /// The buffer receives the character of the **physical** key, not of the
+        /// current layout — that is how the DOS original worked and why the
+        /// Cyrillic cheats ("ГОРЕЦ", "СИМСИМ", ...) work from either layout. The
+        /// check feeds the same syms a keypress produces, so it covers both.
+        /// </summary>
+        public static int CheatCheck()
+        {
+            Glob.Reset(Seed);
+            Vga.Init(320, 200);
+            Vga.SetRect(0, 320, 0, 200);
+
+            DGame.Map = 1;
+            DGame.TwoPl = false;
+            DGame.Dm = false;
+            DGame.State = DGame.GsGame;
+            DGame.Init();
+            World.LoadLightningSounds();
+            Player.Reset();
+            DGame.Start();
+
+            int failed = 0;
+
+            // A keypress produces a lowercase sym for letters (see Kbd.BuildVkToSym)
+            // and the buffer stores it uppercased, so the cheat text is fed in the
+            // same shape.
+            failed += Expect("UJHTW (ГОРЕЦ: immortal)", Type("UJHTW"), () => Player.Immortal);
+            failed += Expect("TANK", Type("TANK"), () => DGame.Pl1.Life == 200 && DGame.Pl1.Armor == 200);
+            failed += Expect("RAMBO", Type("RAMBO"), () => DGame.Pl1.Ammo == 30000 && DGame.Pl1.Wpns == 0x7FF);
+            failed += Expect("BULLFROG (jump x2)", Type("BULLFROG"), () => Player.Jump == 20);
+            failed += Expect("FORMULA1 (speed x3)", Type("FORMULA1"), () => Player.Run == 24);
+            failed += Expect(",TKSQJHTK (БЕЛЫЙ ОРЕЛ: fly)", Type(",TKSQJHTK"), () => Player.Fly);
+            failed += Expect("CBVCBV (СИМСИМ: open doors)", Type("CBVCBV"), () => true);
+            failed += Expect("GJITKYF05 (ПОШЁЛ НА 05)", Type("GJITKYF05"), () => DGame.Map == 5);
+            failed += Expect("GOODBYE", Type("GOODBYE"), () => DGame.Exit == 1);
+
+            Console.WriteLine(failed == 0
+                ? "cheats: all 9 ok"
+                : "cheats: " + failed + " failed");
+
+            return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>Feeds a cheat the way a keyboard does and runs one tick.</summary>
+        private static bool Type(string text)
+        {
+            for (int i = 0; i < text.Length; ++i)
+            {
+                char c = text[i];
+                int sym = c >= 'A' && c <= 'Z' ? c + 32 : c;
+                Menu.KeyProc(sym);
+            }
+
+            // Menu.Code() runs from Game.Act(), so one tick applies the cheat.
+            DGame.Act();
+            return true;
+        }
+
+        private static int Expect(string name, bool typed, Func<bool> check)
+        {
+            bool ok;
+            try
+            {
+                ok = typed && check();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("  " + name + ": ERROR " + Log.Describe(e));
+                return 1;
+            }
+
+            if (!ok) Console.WriteLine("  " + name + ": FAILED");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>
         /// --music &lt;track&gt;: load a track the way the game does (file first, then
         /// the DMM song inside the WAD) and render a second of it.
         ///

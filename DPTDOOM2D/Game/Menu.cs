@@ -168,7 +168,7 @@ namespace DPTDOOM2D.Game
             else if (Tail(",TKSQJHTK")) Player.Fly = !Player.Fly;
             else if (Tail("CBVCBV")) Switches.CheatOpen();
             else if (Tail("GOODBYE")) Game.Exit = 1;
-            else if (Tail("GJITKYF"))
+            else if (Tail9("GJITKYF"))
             {
                 if (cbuf[30] >= '0' && cbuf[30] <= '9' && cbuf[31] >= '0' && cbuf[31] <= '9')
                 {
@@ -190,6 +190,28 @@ namespace DPTDOOM2D.Game
             int at = cbuf.Length - text.Length;
             for (int i = 0; i < text.Length; ++i)
                 if (cbuf[at + i] != (byte)text[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// "GJITKYF" followed by the two digits of the target level.
+        ///
+        /// The original C compares nine bytes at <c>cbuf+23</c> against a
+        /// seven-character literal (<c>memcmp(cbuf+32-9,"GJITKYF",7)</c>), so the
+        /// NUL terminator is compared against the first digit and the cheat never
+        /// fires. The documented behaviour is "GJITKYF05" — the name and two
+        /// digits — and that is what this checks.
+        /// </summary>
+        static bool Tail9(string text)
+        {
+            const int length = 9;   // name + two digits
+
+            if (text.Length != 7) return false;
+
+            int at = cbuf.Length - length;
+            for (int i = 0; i < text.Length; ++i)
+                if (cbuf[at + i] != (byte)text[i]) return false;
+
             return true;
         }
 

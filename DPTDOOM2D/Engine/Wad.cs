@@ -45,6 +45,8 @@ namespace DPTDOOM2D.Engine
             wadNames.Clear();
             wadData.Clear();
             Entries.Clear();
+            preloaded.Clear();
+            looseLumps.Clear();
         }
 
         public static void AddWad(string fn)
@@ -54,13 +56,52 @@ namespace DPTDOOM2D.Engine
             wadNames.Add(fn);
         }
 
+        /// <summary>
+        /// Adds a WAD whose bytes are already in memory: a WAD unpacked from a PK3.
+        /// <paramref name="displayName"/> is what the log and the error messages
+        /// call it.
+        /// </summary>
+        public static void AddWadFromBytes(string displayName, byte[] data)
+        {
+            if (wadNames.Count >= MaxWads)
+                throw new Fatal("Не могу добавить WAD " + displayName);
+
+            preloaded[wadNames.Count] = data;
+            wadNames.Add(displayName);
+        }
+
+        /// <summary>A single loose lump: a resource from a PK3 that is not in a WAD.</summary>
+        public static void AddLumpFromBytes(string name, byte[] data)
+        {
+            var lump = new Lump();
+            lump.Name = name;
+            lump.Data = data;
+            looseLumps.Add(lump);
+        }
+
+        private sealed class Lump
+        {
+            public string Name;
+            public byte[] Data;
+        }
+
+        /// <summary>WAD bytes that came from memory, keyed by their index in wadNames.</summary>
+        static readonly Dictionary<int, byte[]> preloaded = new Dictionary<int, byte[]>();
+
+        static readonly List<Lump> looseLumps = new List<Lump>();
+
         public static void InitWads()
         {
             if (wadNames.Count == 0)
                 throw new Fatal("Не задан ни один WAD-файл");
 
+            wadData.Clear();
+
             for (int i = 0; i < wadNames.Count; ++i)
-                wadData.Add(File.ReadAllBytes(wadNames[i]));
+            {
+                byte[] inMemory;
+                wadData.Add(preloaded.TryGetValue(i, out inMemory) ? inMemory : File.ReadAllBytes(wadNames[i]));
+            }
 
             // Main WAD: builds the directory, everything else overrides/appends.
             ReadDirectory(0, 0);
@@ -111,7 +152,53 @@ namespace DPTDOOM2D.Engine
                 }
             }
 
+            ApplyLooseLumps();
             AllocRes();
+        }
+
+        /// <summary>
+        /// Applies resources that came from a PK3 without a WAD around them: a
+        /// loose lump replaces a resource of the same name, or adds a new one.
+        /// The bytes are appended as one extra "file" so offsets stay valid.
+        /// </summary>
+        private static void ApplyLooseLumps()
+        {
+            if (looseLumps.Count == 0) return;
+
+            // One synthetic file holding every loose lump back to back, so the
+            // entry offsets are plain indexes into it.
+            var blob = new List<byte>();
+            var offsets = new int[looseLumps.Count];
+
+            for (int i = 0; i < looseLumps.Count; ++i)
+            {
+                offsets[i] = blob.Count;
+                blob.AddRange(looseLumps[i].Data);
+            }
+
+            wadData.Add(blob.ToArray());
+            wadNames.Add("pk3:loose");
+            int file = wadData.Count - 1;
+
+            for (int i = 0; i < looseLumps.Count; ++i)
+            {
+                string name = looseLumps[i].Name;
+                int length = looseLumps[i].Data.Length;
+                int k = IndexOf(name);
+
+                if (k >= 0)
+                {
+                    Entries[k].Offset = offsets[i];
+                    Entries[k].Length = length;
+                    Entries[k].File = file;
+                }
+                else
+                {
+                    AddEntry(name, offsets[i], length, file);
+                }
+            }
+
+            looseLumps.Clear();
         }
 
         static void ReadDirectory(int fileIndex, int entryIndex)

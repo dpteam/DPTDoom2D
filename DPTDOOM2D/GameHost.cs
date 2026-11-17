@@ -137,6 +137,12 @@ namespace DPTDOOM2D
 
                     Kbd.LastKey = gameKey;
 
+                    // G_keyf: every key press shifts the cheat buffer, whether or
+                    // not a menu is open. This used to be wired only in the
+                    // headless runner, so the cheats never worked in the real
+                    // game at all.
+                    if (gameKey != 0) Menu.KeyProc(gameKey);
+
                     if (!overlay.LocksInput)
                     {
                         RunGameTick();

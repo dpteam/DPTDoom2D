@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Text;
 using System.Windows.Forms;
 using DPTDOOM2D.Shared;
 
@@ -16,364 +17,381 @@ namespace DPTDOOM2D.Launcher
     /// <summary>
     /// The launcher: pick a mode, start the game, browse the master's session list.
     ///
-    /// Deliberately a plain WinForms window rather than an embedded browser. The
-    /// launcher's whole job is a dozen options and one button; a browser control
-    /// would add an engine, a COM interop layer and a class of layout bugs for
-    /// nothing.
+    /// The interface is real HTML/CSS/JS rendered by the WebBrowser control, the
+    /// same approach DPT.DOOM uses. MSHTML ships with every supported Windows, so
+    /// this costs no extra dependency — and it keeps the launcher's layout in a
+    /// file a designer can edit instead of in a hundred lines of control
+    /// positioning.
+    ///
+    /// The bridge is navigation-based rather than COM: the page navigates to
+    /// dptdoom2d://&lt;verb&gt;, the host cancels that navigation and reads the payload
+    /// back out of the document. That works on Windows XP, where the managed
+    /// ObjectForScripting route needs a newer MSHTML than the OS has.
     /// </summary>
     internal sealed class LauncherForm : Form
     {
-        private LauncherSettings settings;
+        /// <summary>Private URL scheme used by the page to call into the host.</summary>
+        private const string BridgeScheme = "dptdoom2d://";
 
-        private ComboBox mapBox;
-        private RadioButton onePlayer;
-        private RadioButton twoPlayers;
-        private NumericUpDown portBox;
-        private TextBox passwordBox;
-        private ComboBox scaleBox;
-        private ComboBox stretchBox;
-        private ComboBox mapPackBox;
-        private CheckBox fullscreen;
-        private TextBox masterBox;
-        private CheckBox useRelay;
-        private Button playButton;
-        private Button refreshButton;
-        private Button joinButton;
-        private ListView sessions;
-        private TextBox logBox;
-        private TextBox commandBox;
+        private readonly LauncherSettings settings;
 
-        private Process running;
+        private WebBrowser browser;
+        private Process gameProcess;
+        private string lastLogDirectory;
 
         public LauncherForm()
         {
             settings = LauncherSettings.Load();
-            BuildUi();
-            LoadSettings();
-            AppendLog("Launcher ready. Game: " + (settings.GamePath.Length > 0 ? settings.GamePath : "(not found)"));
-        }
 
-        private void BuildUi()
-        {
             Text = Branding.LauncherName;
-            ClientSize = new Size(760, 620);
-            MinimumSize = new Size(700, 580);
+            ClientSize = new Size(1000, 720);
+            MinimumSize = new Size(860, 600);
             StartPosition = FormStartPosition.CenterScreen;
-            BackColor = Color.FromArgb(18, 16, 20);
-            ForeColor = Color.FromArgb(230, 230, 230);
-            Font = new Font("Segoe UI", 9f);
+            BackColor = Color.FromArgb(0x13, 0x15, 0x1D);
 
-            var title = new Label();
-            title.Text = Branding.Name;
-            title.Font = new Font("Segoe UI", 20f, FontStyle.Bold);
-            title.ForeColor = Color.FromArgb(255, 77, 90);
-            title.AutoSize = true;
-            title.Location = new Point(16, 10);
-            Controls.Add(title);
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            catch { }
 
-            var subtitle = new Label();
-            subtitle.Text = Branding.Tagline;
-            subtitle.ForeColor = Color.FromArgb(150, 150, 160);
-            subtitle.AutoSize = true;
-            subtitle.Location = new Point(20, 48);
-            Controls.Add(subtitle);
+            browser = new WebBrowser();
+            browser.Dock = DockStyle.Fill;
+            browser.IsWebBrowserContextMenuEnabled = false;
+            browser.AllowWebBrowserDrop = false;
+            browser.WebBrowserShortcutsEnabled = true;
+            browser.ScriptErrorsSuppressed = true;
+            browser.Navigating += OnNavigating;
+            Controls.Add(browser);
 
-            // ---- single player ------------------------------------------------
-            var singleGroup = MakeGroup("Single player", 16, 80, 360, 130);
-            Controls.Add(singleGroup);
-
-            mapBox = new ComboBox();
-            mapBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            for (int i = 1; i <= 19; ++i) mapBox.Items.Add("MAP" + i.ToString("00"));
-            mapBox.SelectedIndex = 0;
-            mapBox.Location = new Point(90, 24);
-            mapBox.Width = 120;
-            singleGroup.Controls.Add(MakeLabel("Level", 12, 27));
-            singleGroup.Controls.Add(mapBox);
-
-            // Custom map library. "-" is the built-in campaign; anything else is
-            // a WAD from Data/Maps, loaded instead of it.
-            mapPackBox = new ComboBox();
-            mapPackBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            mapPackBox.Location = new Point(90, 52);
-            mapPackBox.Width = 250;
-            singleGroup.Controls.Add(MakeLabel("Map pack", 12, 55));
-            singleGroup.Controls.Add(mapPackBox);
-
-            scaleBox = new ComboBox();
-            scaleBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            scaleBox.Items.AddRange(new object[] { "1x", "2x", "3x", "4x", "5x", "6x", "fit" });
-            scaleBox.SelectedIndex = 1;
-            scaleBox.Location = new Point(90, 80);
-            scaleBox.Width = 120;
-            singleGroup.Controls.Add(MakeLabel("Window", 12, 83));
-            singleGroup.Controls.Add(scaleBox);
-
-            stretchBox = new ComboBox();
-            stretchBox.DropDownStyle = ComboBoxStyle.DropDownList;
-            stretchBox.Items.AddRange(new object[] { "pixel perfect", "nearest", "smooth" });
-            stretchBox.SelectedIndex = 1;
-            stretchBox.Location = new Point(90, 104);
-            stretchBox.Width = 120;
-            singleGroup.Controls.Add(MakeLabel("Stretch", 12, 107));
-            singleGroup.Controls.Add(stretchBox);
-
-            fullscreen = new CheckBox();
-            fullscreen.Text = "Fullscreen";
-            fullscreen.Location = new Point(230, 106);
-            fullscreen.AutoSize = true;
-            singleGroup.Controls.Add(fullscreen);
-
-            // ---- network ------------------------------------------------------
-            var netGroup = MakeGroup("Two players (lockstep over TCP)", 16, 218, 360, 170);
-            Controls.Add(netGroup);
-
-            onePlayer = new RadioButton();
-            onePlayer.Text = "Cooperative";
-            onePlayer.Location = new Point(12, 24);
-            onePlayer.AutoSize = true;
-            onePlayer.Checked = true;
-            netGroup.Controls.Add(onePlayer);
-
-            twoPlayers = new RadioButton();
-            twoPlayers.Text = "Deathmatch";
-            twoPlayers.Location = new Point(140, 24);
-            twoPlayers.AutoSize = true;
-            netGroup.Controls.Add(twoPlayers);
-
-            netGroup.Controls.Add(MakeLabel("Port", 12, 60));
-            portBox = new NumericUpDown();
-            portBox.Minimum = 1;
-            portBox.Maximum = 65535;
-            portBox.Value = 5030;
-            portBox.Location = new Point(90, 57);
-            portBox.Width = 100;
-            netGroup.Controls.Add(portBox);
-
-            netGroup.Controls.Add(MakeLabel("Password", 12, 90));
-            passwordBox = new TextBox();
-            passwordBox.Location = new Point(90, 87);
-            passwordBox.Width = 250;
-            passwordBox.UseSystemPasswordChar = true;
-            netGroup.Controls.Add(passwordBox);
-
-            useRelay = new CheckBox();
-            useRelay.Text = "Register on the master (works through NAT)";
-            useRelay.Location = new Point(12, 118);
-            useRelay.AutoSize = true;
-            netGroup.Controls.Add(useRelay);
-
-            netGroup.Controls.Add(MakeLabel("Master", 12, 146));
-            masterBox = new TextBox();
-            masterBox.Location = new Point(90, 143);
-            masterBox.Width = 250;
-            netGroup.Controls.Add(masterBox);
-
-            // ---- sessions -----------------------------------------------------
-            var sessionGroup = MakeGroup("Public sessions", 16, 398, 360, 136);
-            Controls.Add(sessionGroup);
-
-            sessions = new ListView();
-            sessions.View = View.Details;
-            sessions.FullRowSelect = true;
-            sessions.MultiSelect = false;
-            sessions.Location = new Point(12, 22);
-            sessions.Size = new Size(336, 88);
-            sessions.Columns.Add("Name", 120);
-            sessions.Columns.Add("Map", 50);
-            sessions.Columns.Add("Players", 55);
-            sessions.Columns.Add("Relay", 50);
-            sessionGroup.Controls.Add(sessions);
-
-            refreshButton = new Button();
-            refreshButton.Text = "Refresh";
-            refreshButton.Location = new Point(12, 114);
-            refreshButton.Width = 90;
-            refreshButton.Click += (s, e) => RefreshSessions();
-            sessionGroup.Controls.Add(refreshButton);
-
-            joinButton = new Button();
-            joinButton.Text = "Join by id";
-            joinButton.Location = new Point(110, 114);
-            joinButton.Width = 90;
-            joinButton.Click += (s, e) => JoinById();
-            sessionGroup.Controls.Add(joinButton);
-
-            // ---- right column -------------------------------------------------
-            playButton = new Button();
-            playButton.Text = "PLAY";
-            playButton.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
-            playButton.BackColor = Color.FromArgb(200, 48, 60);
-            playButton.ForeColor = Color.White;
-            playButton.FlatStyle = FlatStyle.Flat;
-            playButton.Location = new Point(396, 84);
-            playButton.Size = new Size(348, 52);
-            playButton.Click += (s, e) => StartGame();
-            Controls.Add(playButton);
-
-            var commandLabel = MakeLabel("Command line", 396, 148);
-            Controls.Add(commandLabel);
-
-            commandBox = new TextBox();
-            commandBox.ReadOnly = true;
-            commandBox.Location = new Point(396, 168);
-            commandBox.Size = new Size(348, 22);
-            commandBox.BackColor = Color.FromArgb(30, 28, 34);
-            commandBox.ForeColor = Color.FromArgb(180, 180, 190);
-            Controls.Add(commandBox);
-
-            var logLabel = MakeLabel("Log", 396, 202);
-            Controls.Add(logLabel);
-
-            logBox = new TextBox();
-            logBox.Multiline = true;
-            logBox.ReadOnly = true;
-            logBox.ScrollBars = ScrollBars.Vertical;
-            logBox.Location = new Point(396, 222);
-            logBox.Size = new Size(348, 312);
-            logBox.BackColor = Color.FromArgb(12, 10, 14);
-            logBox.ForeColor = Color.FromArgb(200, 200, 210);
-            logBox.Font = new Font("Consolas", 9f);
-            Controls.Add(logBox);
-
-            // Keep the preview in step with the controls it describes.
-            mapBox.SelectedIndexChanged += (s, e) => UpdatePreview();
-            scaleBox.SelectedIndexChanged += (s, e) => UpdatePreview();
-            stretchBox.SelectedIndexChanged += (s, e) => UpdatePreview();
-            mapPackBox.SelectedIndexChanged += (s, e) => UpdatePreview();
-            portBox.ValueChanged += (s, e) => UpdatePreview();
-            useRelay.CheckedChanged += (s, e) => UpdatePreview();
-            fullscreen.CheckedChanged += (s, e) => UpdatePreview();
-            onePlayer.CheckedChanged += (s, e) => UpdatePreview();
-            twoPlayers.CheckedChanged += (s, e) => UpdatePreview();
-            passwordBox.TextChanged += (s, e) => UpdatePreview();
+            LoadPage();
         }
 
-        private static GroupBox MakeGroup(string text, int x, int y, int w, int h)
+        // ---------------------------------------------------------------- page
+
+        /// <summary>
+        /// Merges the three embedded assets into one document. Keeping CSS and
+        /// script in separate files during development keeps them readable; at
+        /// runtime the page is written to disk as one file.
+        /// </summary>
+        public static string AssemblePage()
         {
-            var group = new GroupBox();
-            group.Text = text;
-            group.ForeColor = Color.FromArgb(200, 200, 210);
-            group.Location = new Point(x, y);
-            group.Size = new Size(w, h);
-            return group;
-        }
-        private static Label MakeLabel(string text, int x, int y)
-        {
-            var label = new Label();
-            label.Text = text;
-            label.AutoSize = true;
-            label.Location = new Point(x, y);
-            return label;
+            string html = ReadAsset("ui.html");
+            html = html.Replace("/*__STYLE__*/", Brand(ReadAsset("theme.css")));
+            html = html.Replace("/*__SCRIPT__*/", ReadAsset("app.js"));
+            return Brand(html);
         }
 
-        private void LoadSettings()
+        /// <summary>
+        /// Substitutes the project's own name and colours into a page asset, so a
+        /// fork that renames itself does not have to hand-edit an embedded file.
+        /// </summary>
+        private static string Brand(string asset)
         {
-            mapBox.SelectedIndex = Math.Max(0, Math.Min(18, settings.Map - 1));
-            scaleBox.SelectedIndex = settings.Scale <= 0 ? 6 : Math.Max(0, Math.Min(5, settings.Scale - 1));
-            fullscreen.Checked = settings.Fullscreen;
-            portBox.Value = Math.Max(1, Math.Min(65535, settings.Port));
-            passwordBox.Text = settings.Password;
-            masterBox.Text = settings.Master;
-            useRelay.Checked = settings.UseRelay;
+            int dot = Branding.Name.IndexOf('.');
 
-            switch (settings.Stretch)
+            string marked = dot > 0 && dot < Branding.Name.Length - 1
+                ? Branding.Name.Substring(0, dot) + "<em>" +
+                  Branding.Name.Substring(dot, 1) + "</em>" +
+                  Branding.Name.Substring(dot + 1)
+                : Branding.Name;
+
+            return asset
+                .Replace("__BRAND_NAME__", Branding.Name)
+                .Replace("__BRAND_MARKED__", marked)
+                .Replace("__BRAND_TITLE__", Branding.LauncherName)
+                .Replace("__BRAND_TAGLINE__", Branding.Tagline)
+                .Replace("__BRAND_VERSION__", Branding.Version)
+                .Replace("__BRAND_PRIMARY__", Branding.PrimaryColor)
+                .Replace("__BRAND_SECONDARY__", Branding.SecondaryColor)
+                .Replace("__BRAND_DARK__", Branding.DarkColor)
+                .Replace("__BRAND_ONDARK__", Branding.OnDarkColor);
+        }
+
+        private static string ReadAsset(string name)
+        {
+            var assembly = typeof(LauncherForm).Assembly;
+
+            using (Stream stream = assembly.GetManifestResourceStream("DPTDOOM2D.Launcher.Assets." + name))
             {
-                case "pixel": stretchBox.SelectedIndex = 0; break;
-                case "smooth": stretchBox.SelectedIndex = 2; break;
-                default: stretchBox.SelectedIndex = 1; break;
+                if (stream == null) throw new Exception("Missing embedded asset: " + name);
+
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes the page into Storage/webview and navigates to it as a file.
+        ///
+        /// Loading a real file matters for the bridge: a document assigned through
+        /// DocumentText lives at about:blank, and MSHTML does not hand the host to
+        /// that origin on every Windows version. A file in the Local Machine zone
+        /// always gets it.
+        /// </summary>
+        private void LoadPage()
+        {
+            try
+            {
+                string directory = Path.Combine(LauncherSettings.DataDirectory, "webview");
+                Directory.CreateDirectory(directory);
+
+                string path = Path.Combine(directory, "launcher.html");
+                File.WriteAllText(path, AssemblePage(), new UTF8Encoding(false));
+
+                // DPTDOOM2D_LAUNCHER_TAB=servers opens the server browser; the
+                // page reads it from the hash, which is also what a deep link uses.
+                string tab = Environment.GetEnvironmentVariable("DPTDOOM2D_LAUNCHER_TAB");
+
+                browser.Navigate(path + (string.IsNullOrEmpty(tab) ? "" : "#" + tab));
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(this, "Не удалось открыть интерфейс лаунчера: " + e.Message,
+                    Branding.LauncherName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ---------------------------------------------------------------- bridge
+
+        /// <summary>
+        /// The page calls the host by navigating to dptdoom2d://&lt;verb&gt;. The
+        /// navigation is cancelled and the verb dispatched; the payload is read
+        /// back from the page because it can be arbitrarily long.
+        /// </summary>
+        private void OnNavigating(object sender, WebBrowserNavigatingEventArgs e)
+        {
+            string url = e.Url == null ? "" : e.Url.AbsoluteUri;
+
+            if (!url.StartsWith(BridgeScheme, StringComparison.OrdinalIgnoreCase)) return;
+
+            e.Cancel = true;
+
+            string verb = url.Substring(BridgeScheme.Length).Trim('/');
+
+            int query = verb.IndexOf('?');
+            if (query >= 0) verb = verb.Substring(0, query);
+
+            string payload = TakePayload();
+
+            try
+            {
+                HandleVerb(verb, payload);
+            }
+            catch (Exception ex)
+            {
+                Send("fatal", "Ошибка лаунчера: " + ex.Message);
+            }
+        }
+
+        private string TakePayload()
+        {
+            if (browser.Document == null) return "";
+
+            try
+            {
+                object result = browser.Document.InvokeScript("dptdoom2dTakePayload");
+                return Convert.ToString(result) ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        /// <summary>Host → page.</summary>
+        private void Send(string verb, string payload)
+        {
+            if (browser.Document == null) return;
+
+            try
+            {
+                browser.Document.InvokeScript("dptReceive", new object[] { verb, payload ?? "" });
+            }
+            catch
+            {
+                // The document is navigating or has been replaced.
+            }
+        }
+
+        /// <summary>
+        /// Single entry point for everything the page asks for.
+        ///
+        /// The comparison is **case-insensitive**, and that is not defensive
+        /// coding: MSHTML lower-cases the authority part of a URI, so
+        /// <c>dptdoom2d://masterSave</c> arrives here as <c>mastersave</c>. A
+        /// case-sensitive switch silently ignores every camel-case verb.
+        /// </summary>
+        public void HandleVerb(string verb, string payload)
+        {
+            string name = (verb ?? "").Trim();
+
+            switch (name.ToLowerInvariant())
+            {
+                case "ready":
+                    Send("theme", settings.Theme);
+                    Send("state", settings.Encode());
+                    Send("game", DescribeGame());
+                    Send("storage", DescribeStorage());
+                    Send("hasLog", lastLogDirectory != null ? "1" : "0");
+                    Send("running", IsGameRunning() ? "1" : "0");
+                    Send("status", "Готов. Выбери режим и нажми «Запустить игру».\n0");
+                    break;
+
+                case "preview":
+                    settings.Decode(payload);
+                    settings.Save();
+                    Send("preview", settings.BuildArguments(true));
+                    break;
+
+                case "pack":
+                    settings.Decode(payload);
+                    settings.MapPack = payload ?? "";
+                    settings.Save();
+                    Send("game", DescribeGame());
+                    break;
+
+                case "browse":
+                    OnBrowse();
+                    break;
+
+                case "launch":
+                    OnLaunch(payload);
+                    break;
+
+                case "mastersave":
+                    settings.Master = (payload ?? "").Trim();
+                    settings.Save();
+                    Send("status", "Мастер сохранён: " + settings.Master + "\n0");
+                    break;
+
+                case "masterrefresh":
+                    OnMasterRefresh(payload);
+                    break;
+
+                case "themesave":
+                    settings.Theme = payload == "light" ? "light" : "dark";
+                    settings.Save();
+                    break;
+
+                case "openlog":
+                    OnOpenLog();
+                    break;
+            }
+        }
+
+        // ---------------------------------------------------------------- verbs
+
+        /// <summary>
+        /// Describes the game to the page: exe name, data folder, the map packs it
+        /// can see and how many levels the chosen pack defines.
+        /// </summary>
+        private string DescribeGame()
+        {
+            if (string.IsNullOrEmpty(settings.GamePath) || !File.Exists(settings.GamePath))
+            {
+                string found = LauncherSettings.FindGame();
+                if (found != null) settings.GamePath = found;
             }
 
-            if (settings.TwoPlayers && settings.Deathmatch) twoPlayers.Checked = true;
-            else onePlayer.Checked = true;
+            if (string.IsNullOrEmpty(settings.GamePath) || !File.Exists(settings.GamePath))
+                return "dptdoom2d.exe\nИгра не найдена рядом с лаунчером — выбери файл вручную.\n\n19";
 
-            if (settings.GamePath.Length == 0) settings.GamePath = LauncherSettings.FindGame() ?? "";
+            string directory = Path.GetDirectoryName(settings.GamePath);
+            string data = Path.Combine(directory, "Data");
 
-            RefreshMapPacks();
-
-            UpdatePreview();
-        }
-
-        /// <summary>Fills the map pack list from the game's Data/Maps folder.</summary>
-        private void RefreshMapPacks()
-        {
-            string current = settings.MapPack;
-
-            mapPackBox.Items.Clear();
-            mapPackBox.Items.Add("(built-in campaign)");
+            string hint = Directory.Exists(data)
+                ? "Данные: " + data
+                : "Папка Data не найдена рядом с игрой: " + directory;
 
             string[] packs = LauncherSettings.FindMapPacks(settings.GamePath);
-            for (int i = 0; i < packs.Length; ++i) mapPackBox.Items.Add(packs[i]);
+            int levels = LauncherSettings.CountLevels(settings.GamePath, settings.MapPack);
 
-            int at = 0;
-            if (!string.IsNullOrEmpty(current))
+            string[] mods = LauncherSettings.FindMods(settings.GamePath);
+            var modRows = new StringBuilder();
+
+            for (int i = 0; i < mods.Length; ++i)
             {
-                for (int i = 1; i < mapPackBox.Items.Count; ++i)
-                    if (string.Equals((string)mapPackBox.Items[i], current, StringComparison.OrdinalIgnoreCase)) { at = i; break; }
+                string full = Path.Combine(ModsDirectoryFor(settings.GamePath), mods[i]);
+
+                if (modRows.Length > 0) modRows.Append('\t');
+                modRows.Append(Safe(mods[i])).Append('=').Append(DescribeSize(full));
             }
 
-            mapPackBox.SelectedIndex = at;
+            return Path.GetFileName(settings.GamePath) + "\n" + hint + "\n" +
+                string.Join("\t", packs) + "\n" + levels + "\n" + modRows;
         }
 
-        private void Persist()
+        private static string ModsDirectoryFor(string gamePath)
         {
-            settings.Map = mapBox.SelectedIndex + 1;
-            settings.Scale = scaleBox.SelectedIndex == 6 ? 0 : scaleBox.SelectedIndex + 1;
-            settings.Fullscreen = fullscreen.Checked;
-            settings.Port = (int)portBox.Value;
-            settings.Password = passwordBox.Text;
-            settings.Master = masterBox.Text;
-            settings.UseRelay = useRelay.Checked;
-            settings.TwoPlayers = twoPlayers.Checked;
-            settings.Deathmatch = twoPlayers.Checked;
+            return string.IsNullOrEmpty(gamePath)
+                ? LauncherSettings.ModsDirectory
+                : Path.Combine(Path.GetDirectoryName(gamePath), "Data", "Mods");
+        }
 
-            switch (stretchBox.SelectedIndex)
+        private static string DescribeSize(string path)
+        {
+            try
             {
-                case 0: settings.Stretch = "pixel"; break;
-                case 2: settings.Stretch = "smooth"; break;
-                default: settings.Stretch = "near"; break;
+                long size = new FileInfo(path).Length;
+                if (size >= 1024 * 1024) return (size / (1024.0 * 1024.0)).ToString("0.0") + " МБ";
+                return Math.Max(1, size / 1024) + " КБ";
             }
+            catch
+            {
+                return "?";
+            }
+        }
 
-            settings.MapPack = mapPackBox.SelectedIndex > 0 ? (string)mapPackBox.SelectedItem : "";
+        private string DescribeStorage()
+        {
+            return "Лаунчер: " + LauncherSettings.DataDirectory + " · игра пишет логи в Storage\\Logs";
+        }
 
+        private void OnBrowse()
+        {
+            using (var dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Выбери dptdoom2d.exe";
+                dialog.Filter = "DPT.DOOM 2D (dptdoom2d.exe)|dptdoom2d.exe|Программы (*.exe)|*.exe";
+
+                if (Directory.Exists(Path.GetDirectoryName(settings.GamePath ?? "")))
+                    dialog.InitialDirectory = Path.GetDirectoryName(settings.GamePath);
+
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+                settings.GamePath = dialog.FileName;
+                settings.Save();
+
+                Send("state", settings.Encode());
+                Send("game", DescribeGame());
+            }
+        }
+
+        private void OnLaunch(string payload)
+        {
+            settings.Decode(payload);
             settings.Save();
-        }
 
-        private void UpdatePreview()
-        {
-            Persist();
-
-            string args = settings.BuildArguments(true);
-            commandBox.Text = string.IsNullOrEmpty(args) ? "(single player, defaults)" : args;
-        }
-
-        private void AppendLog(string line)
-        {
-            logBox.AppendText(DateTime.Now.ToString("HH:mm:ss") + "  " + line + Environment.NewLine);
-        }
-
-        private void StartGame()
-        {
-            if (running != null && !running.HasExited)
+            if (IsGameRunning())
             {
-                AppendLog("the game is already running");
+                Send("status", "Игра уже запущена.\n1");
                 return;
             }
 
             string exe = settings.GamePath;
+
             if (string.IsNullOrEmpty(exe) || !File.Exists(exe))
             {
                 exe = LauncherSettings.FindGame();
+
                 if (exe == null)
                 {
-                    MessageBox.Show(this, "dptdoom2d.exe не найден рядом с лаунчером.",
-                        Branding.LauncherName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Send("status", "dptdoom2d.exe не найден рядом с лаунчером.\n1");
                     return;
                 }
+
                 settings.GamePath = exe;
             }
-
-            Persist();
 
             var info = new ProcessStartInfo();
             info.FileName = exe;
@@ -383,141 +401,148 @@ namespace DPTDOOM2D.Launcher
 
             try
             {
-                running = Process.Start(info);
-                AppendLog("started: " + Path.GetFileName(exe) + " " + settings.BuildArguments(true));
+                gameProcess = Process.Start(info);
+                lastLogDirectory = Path.Combine(Path.GetDirectoryName(exe), "Storage", "Logs");
+
+                Send("running", "1");
+                Send("hasLog", "1");
+                Send("status", "Запущено: " + Path.GetFileName(exe) + " " + settings.BuildArguments(true) + "\n0");
+
+                gameProcess.EnableRaisingEvents = true;
+                gameProcess.Exited += OnGameExited;
             }
             catch (Exception e)
             {
-                AppendLog("cannot start: " + e.Message);
-                MessageBox.Show(this, e.Message, Branding.LauncherName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Send("status", "Не удалось запустить: " + e.Message + "\n1");
             }
         }
 
-        private void RefreshSessions()
+        private void OnGameExited(object sender, EventArgs e)
         {
-            sessions.Items.Clear();
-
-            string host = masterBox.Text.Trim();
-            if (host.Length == 0)
+            try
             {
-                AppendLog("set a master address first");
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    Send("running", "0");
+                    Send("status", "Игра завершена.\n0");
+                });
+            }
+            catch
+            {
+                // The window is closing.
+            }
+        }
+
+        private bool IsGameRunning()
+        {
+            if (gameProcess == null) return false;
+
+            try { return !gameProcess.HasExited; }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Queries the master and pushes one tab-separated row per session:
+        /// name, map, map number, players, address, port, relay, id.
+        /// </summary>
+        private void OnMasterRefresh(string endpoint)
+        {
+            string host;
+            int port;
+
+            if (!SplitEndpoint(string.IsNullOrEmpty(endpoint) ? settings.Master : endpoint, out host, out port))
+            {
+                Send("status", "Адрес мастера должен быть вида 127.0.0.1:25135\n1");
                 return;
             }
 
-            string address = host;
-            int port = MasterProtocol.DefaultPort;
-
-            int colon = address.IndexOf(':');
-            if (colon > 0)
-            {
-                port = int.Parse(address.Substring(colon + 1));
-                address = address.Substring(0, colon);
-            }
-
-            AppendLog("querying " + address + ":" + port + " ...");
+            settings.Master = host + ":" + port;
+            settings.Save();
 
             try
             {
-                List<MasterServerEntry> entries = MasterClient.List(address, port, 4000);
+                List<MasterServerEntry> entries = MasterClient.List(host, port, 4000);
 
-                foreach (MasterServerEntry entry in entries)
+                var rows = new StringBuilder();
+                for (int i = 0; i < entries.Count; ++i)
                 {
-                    var item = new ListViewItem(entry.Info.Name);
-                    item.SubItems.Add(entry.Info.MapText);
-                    item.SubItems.Add(entry.Info.Players.ToString());
-                    item.SubItems.Add(entry.RelayAvailable ? "yes" : "no");
-                    item.Tag = entry;
-                    sessions.Items.Add(item);
+                    MasterServerEntry entry = entries[i];
+                    if (entry.Info == null) continue;
+
+                    string map = entry.Info.MapText ?? "MAP01";
+                    int number = ParseMapNumber(map);
+
+                    if (rows.Length > 0) rows.Append('\n');
+
+                    rows.Append(Safe(entry.Info.Name)).Append('\t');
+                    rows.Append(map).Append('\t');
+                    rows.Append(number).Append('\t');
+                    rows.Append(entry.Info.Players).Append('\t');
+                    rows.Append(entry.AddressText).Append('\t');
+                    rows.Append(entry.Info.Port).Append('\t');
+                    rows.Append(entry.RelayAvailable ? "1" : "0").Append('\t');
+                    rows.Append(MasterProtocol.IdToHex(entry.Id));
                 }
 
-                AppendLog(entries.Count + " session(s)");
+                Send("servers", rows.ToString());
             }
             catch (Exception e)
             {
-                AppendLog("master error: " + e.Message);
+                Send("servers", "");
+                Send("status", "Мастер недоступен: " + e.Message + "\n1");
             }
         }
 
-        private void JoinById()
+        private static string Safe(string text)
         {
-            string exe = settings.GamePath;
-            if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) exe = LauncherSettings.FindGame();
-            if (exe == null) { AppendLog("game not found"); return; }
+            return (text ?? "").Replace('\t', ' ').Replace('\n', ' ');
+        }
 
-            string sessionId = Prompt.Show(this, "Join by session id", "Paste the 32-character session id:");
-            if (string.IsNullOrEmpty(sessionId)) return;
+        private static int ParseMapNumber(string map)
+        {
+            int number;
+            return map != null && map.Length == 5 && int.TryParse(map.Substring(3), out number) ? number : 1;
+        }
 
-            settings.RelaySession = sessionId.Trim();
-            Persist();
+        private static bool SplitEndpoint(string endpoint, out string host, out int port)
+        {
+            host = "";
+            port = MasterProtocol.DefaultPort;
 
-            var info = new ProcessStartInfo();
-            info.FileName = exe;
-            info.Arguments = "-net join -master " + settings.Master
-                + " -relay-session " + settings.RelaySession
-                + " -scale " + settings.Scale;
-            info.WorkingDirectory = Path.GetDirectoryName(exe);
-            info.UseShellExecute = false;
+            if (string.IsNullOrEmpty(endpoint)) return false;
 
+            string value = endpoint.Trim();
+            int colon = value.LastIndexOf(':');
+
+            if (colon < 0)
+            {
+                host = value;
+                return host.Length > 0;
+            }
+
+            host = value.Substring(0, colon).Trim();
+            return host.Length > 0 && int.TryParse(value.Substring(colon + 1), out port);
+        }
+
+        private void OnOpenLog()
+        {
             try
             {
-                running = Process.Start(info);
-                AppendLog("joining " + settings.RelaySession);
+                if (lastLogDirectory != null && Directory.Exists(lastLogDirectory))
+                    Process.Start("explorer.exe", "\"" + lastLogDirectory + "\"");
+                else
+                    Send("status", "Логов пока нет: игра ещё не запускалась.\n1");
             }
             catch (Exception e)
             {
-                AppendLog("cannot start: " + e.Message);
+                Send("status", "Не удалось открыть папку: " + e.Message + "\n1");
             }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            Persist();
+            settings.Save();
             base.OnFormClosing(e);
-        }
-    }
-
-    /// <summary>A one-field dialog: WinForms has no InputBox and this is all it needs.</summary>
-    internal static class Prompt
-    {
-        public static string Show(IWin32Window owner, string title, string label)
-        {
-            using (var form = new Form())
-            {
-                form.Text = title;
-                form.ClientSize = new Size(420, 120);
-                form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                form.StartPosition = FormStartPosition.CenterParent;
-                form.MaximizeBox = false;
-                form.MinimizeBox = false;
-
-                var text = new Label();
-                text.Text = label;
-                text.Location = new Point(12, 12);
-                text.AutoSize = true;
-                form.Controls.Add(text);
-
-                var input = new TextBox();
-                input.Location = new Point(12, 36);
-                input.Width = 396;
-                form.Controls.Add(input);
-
-                var ok = new Button();
-                ok.Text = "OK";
-                ok.DialogResult = DialogResult.OK;
-                ok.Location = new Point(252, 76);
-                form.Controls.Add(ok);
-
-                var cancel = new Button();
-                cancel.Text = "Cancel";
-                cancel.DialogResult = DialogResult.Cancel;
-                cancel.Location = new Point(333, 76);
-                form.Controls.Add(cancel);
-
-                form.AcceptButton = ok;
-                form.CancelButton = cancel;
-
-                return form.ShowDialog(owner) == DialogResult.OK ? input.Text : null;
-            }
         }
     }
 }

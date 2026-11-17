@@ -88,6 +88,21 @@ namespace DPTDOOM2D
                     return ListMaps();
                 if (args[i] == "--sounds")
                     return CheckSounds();
+                if (args[i] == "--cheats")
+                {
+                    Boot();
+                    return Headless.CheatCheck();
+                }
+                if (args[i] == "--modbuild" && i + 2 < args.Length)
+                {
+                    var inputs = new string[args.Length - i - 2];
+                    Array.Copy(args, i + 2, inputs, 0, inputs.Length);
+                    return ModKit.Build(args[i + 1], inputs);
+                }
+                if (args[i] == "--modlist" && i + 1 < args.Length)
+                    return ModKit.List(args[i + 1]);
+                if (args[i] == "--modunpack" && i + 2 < args.Length)
+                    return ModKit.Unpack(args[i + 1], args[i + 2]);
                 if (args[i] == "--saveload")
                 {
                     Boot();
@@ -163,6 +178,10 @@ namespace DPTDOOM2D
         /// whichever happened to be read last. One pack is loaded per run, which
         /// is also what makes custom maps a drop-in feature — copy a WAD into the
         /// folder and it shows up in the launcher's list.
+        ///
+        /// A -file may be a WAD, a loose LMP, or a PK3/ZIP container; the
+        /// container is unpacked here so the rest of the engine only ever sees
+        /// WADs and lumps.
         /// </summary>
         public static void AddExtraWads()
         {
@@ -177,8 +196,7 @@ namespace DPTDOOM2D
 
                 try
                 {
-                    Wad.AddWad(path);
-                    Log.Info("wad: " + path);
+                    AddContainer(path);
                 }
                 catch (Exception e)
                 {
@@ -197,13 +215,88 @@ namespace DPTDOOM2D
 
             try
             {
-                Wad.AddWad(pack);
+                AddContainer(pack);
                 Log.Info("map pack: " + Path.GetFileName(pack));
             }
             catch (Exception e)
             {
                 Log.Error("cannot load map pack " + pack, e);
             }
+        }
+
+        /// <summary>
+        /// Loads one file as a WAD, an LMP, or a PK3 that may hold both.
+        ///
+        /// Inside a PK3 every *.wad is added in path order (so later ones win,
+        /// like a -file chain) and every other file becomes a loose lump named
+        /// after the file, which is how a single sprite or map gets patched
+        /// without building a WAD at all.
+        /// </summary>
+        private static void AddContainer(string path)
+        {
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+
+            if (extension != ".pk3" && extension != ".zip")
+            {
+                Wad.AddWad(path);
+                Log.Info("wad: " + Path.GetFileName(path));
+                return;
+            }
+
+            byte[] data = File.ReadAllBytes(path);
+
+            if (!Pk3.LooksLikeZip(data))
+            {
+                Log.Warn("pk3: " + Path.GetFileName(path) + " is not a ZIP archive, skipped");
+                return;
+            }
+
+            List<Pk3.Entry> entries = Pk3.ReadDirectory(data);
+            if (entries == null)
+            {
+                Log.Warn("pk3: " + Path.GetFileName(path) + " has no readable directory, skipped");
+                return;
+            }
+
+            int wads = 0, lumps = 0;
+
+            // Sorted so the load order does not depend on how the archive happens
+            // to be laid out; a mod that patches another ships a name that sorts
+            // after it.
+            entries.Sort(delegate (Pk3.Entry a, Pk3.Entry b)
+            {
+                return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            });
+
+            for (int i = 0; i < entries.Count; ++i)
+            {
+                Pk3.Entry entry = entries[i];
+                if (entry.Name.EndsWith("/", StringComparison.Ordinal)) continue;
+
+                string name = Path.GetFileName(entry.Name);
+                if (name.Length == 0) continue;
+
+                string ext = Path.GetExtension(name).ToLowerInvariant();
+
+                byte[] payload = Pk3.Read(data, entry);
+                if (payload == null || payload.Length == 0) continue;
+
+                if (ext == ".wad")
+                {
+                    Wad.AddWadFromBytes(Path.GetFileName(path) + ":" + entry.Name, payload);
+                    ++wads;
+                }
+                else if (ext == ".lmp" || ext == ".vgaimg" || ext == ".dmi" || ext == ".dmm")
+                {
+                    Wad.AddLumpFromBytes(Path.GetFileNameWithoutExtension(name), payload);
+                    ++lumps;
+                }
+            }
+
+            Log.Info("pk3: " + Path.GetFileName(path) + " (" + wads + " wad, " + lumps + " lump)");
+
+            if (wads == 0 && lumps == 0)
+                Log.Warn("pk3: " + Path.GetFileName(path) + " has nothing Doom2D can load");
         }
 
         /// <summary>Where custom map packs live.</summary>

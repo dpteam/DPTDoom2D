@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta charset="utf-8">
+<title>__BRAND_TITLE__</title>
+<style>/*__STYLE__*/</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="sidebar">
+    <div class="brand">__BRAND_MARKED__</div>
+    <div class="eyebrow">__BRAND_TAGLINE__ / launcher</div>
+
+    <div class="nav">
+      <button id="navPlay" class="active" type="button">&#9656; Играть</button>
+      <button id="navServers" type="button">Серверы</button>
+    </div>
+
+    <button id="themeToggle" class="theme-button" type="button">Светлая тема</button>
+
+    <div class="sidebar-foot">
+      <span class="dot"></span> Локальный интерфейс<br>
+      Windows XP &rarr; 11<br>
+      <span id="version">__BRAND_VERSION__</span>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <div class="top">
+      <div class="top-text">
+        <div class="eyebrow">Готов к следующей карте?</div>
+        <h1>Твой DOOM 2D. Твои правила.</h1>
+      </div>
+      <div class="profile">
+        <span id="gameName" class="pill">dptdoom2d.exe</span>
+      </div>
+    </div>
+
+    <!-- ================= servers ================= -->
+    <div class="panel hidden" id="serverBrowser">
+      <div class="section-head"><h2>Серверы · Doom2D</h2><small>каталог мастера / TCP</small></div>
+
+      <div class="row">
+        <label>Мастер · адрес:порт
+          <input id="masterEndpoint" type="text" spellcheck="false" placeholder="127.0.0.1:25135">
+        </label>
+        <button id="masterSave" type="button">Сохранить</button>
+      </div>
+
+      <div class="row">
+        <label>Фильтр · имя или карта
+          <input id="serverFilter" type="text" spellcheck="false" placeholder="например MAP07">
+        </label>
+        <button id="refreshServers" type="button">Обновить список</button>
+      </div>
+
+      <p class="hint">Объявления недоверенные: мастер не проверяет ни порт, ни данные
+        игры. Автоматических запросов нет — только по кнопке. Этот же адрес
+        используется для релея в сетевой игре.</p>
+
+      <div id="serverList" class="server-list">Нажми «Обновить список».</div>
+
+      <div class="row">
+        <label>Подключиться по id сессии (релей)
+          <input id="relaySession" type="text" maxlength="32" spellcheck="false" placeholder="32 hex-символа от хоста">
+        </label>
+        <button id="joinById" type="button">Подключиться</button>
+      </div>
+      <p class="hint">Хост печатает id в консоли при старте. Обе машины подключаются
+        наружу, поэтому проброс портов не нужен.</p>
+    </div>
+
+    <!-- ================= game ================= -->
+    <div id="playPane">
+
+      <div class="panel">
+        <div class="section-head"><h2><span class="num">01</span>Игра</h2><small>только локальные файлы</small></div>
+        <div class="row">
+          <label>Исполняемый файл
+            <input id="executable" type="text" class="path" spellcheck="false" placeholder="dptdoom2d.exe">
+          </label>
+          <button id="browseExe" type="button">Выбрать…</button>
+        </div>
+        <p class="hint" id="dataHint">—</p>
+      </div>
+
+      <div class="grid">
+        <div class="panel col">
+          <div class="section-head"><h2><span class="num">02</span>Сессия</h2></div>
+
+          <div class="mode">
+            <button data-mode="single" class="selected" type="button">Одиночная</button>
+            <button data-mode="hostcoop" type="button">Хост · кооп</button>
+            <button data-mode="hostdm" type="button">Хост · DM</button>
+            <button data-mode="join" type="button">Подключиться</button>
+          </div>
+
+          <label>Карта
+            <select id="map"></select>
+          </label>
+
+          <label>Пак карт
+            <select id="mapPack"></select>
+          </label>
+
+          <label>Имя игрока
+            <input id="playerName" type="text" maxlength="31" spellcheck="false" placeholder="Player">
+          </label>
+
+          <div id="network" class="hidden">
+            <label>Порт
+              <input id="port" type="number" min="1024" max="65535" value="5030">
+            </label>
+            <label id="addressRow">Адрес хоста
+              <input id="address" type="text" spellcheck="false" placeholder="192.168.1.10">
+            </label>
+            <label>Пароль сессии
+              <input id="password" type="password" maxlength="64" spellcheck="false" placeholder="пусто — пускать всех">
+            </label>
+            <label>Мастер · адрес:порт
+              <input id="masterInline" type="text" spellcheck="false" placeholder="127.0.0.1:25135">
+            </label>
+            <label>Relay-сессия · гостю
+              <input id="relaySessionInline" type="text" maxlength="32" spellcheck="false" placeholder="32 hex-символа от хоста">
+            </label>
+            <p class="hint">Хост регистрируется на мастере и ждёт игрока; гость
+              подключается либо по адресу, либо по id сессии через релей.
+              Пароль передаётся открытым текстом: он только от случайных людей.</p>
+          </div>
+        </div>
+
+        <div class="panel col">
+          <div class="section-head"><h2><span class="num">03</span>Видео</h2></div>
+
+          <label>Масштаб
+            <select id="scale">
+              <option value="1">1x</option>
+              <option value="2" selected>2x</option>
+              <option value="3">3x</option>
+              <option value="4">4x</option>
+              <option value="5">5x</option>
+              <option value="6">6x</option>
+              <option value="0">по размеру окна</option>
+            </select>
+          </label>
+
+          <label>Растяжение
+            <select id="stretch">
+              <option value="pixel">pixel perfect — с полями</option>
+              <option value="near" selected>nearest — на весь экран</option>
+              <option value="smooth">smooth — билинейно</option>
+            </select>
+          </label>
+
+          <label class="check"><input id="fullscreen" type="checkbox">Полный экран</label>
+
+          <p class="hint"><b>pixel perfect</b> — целочисленный масштаб, пиксели
+            квадратные, по краям поля. <b>nearest</b> и <b>smooth</b> заполняют
+            весь экран; smooth мягче, для больших и HiDPI-мониторов.</p>
+
+          <div class="section-head mods-head"><h2><span class="num">04</span>Моды</h2></div>
+
+          <div class="mods" id="modList"><div class="mods-empty">Папка Data/Mods пуста.</div></div>
+          <p class="hint">PK3 — это ZIP: WAD внутри подключается как мод, отдельные
+            лампы заменяют ресурсы. Форматы — только родные для Doom2D.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="section-head"><h2><span class="num">05</span>Командная строка</h2><small>без shell</small></div>
+        <pre id="preview">—</pre>
+      </div>
+    </div>
+
+    <div id="fatal" class="hidden"></div>
+    <div class="storage" id="storage"></div>
+
+    <div class="bottom">
+      <button class="launch primary" id="launch" type="button" disabled>Запустить игру &nbsp;&#8599;</button>
+      <button id="openLog" type="button" disabled>Лог</button>
+      <div id="status" class="status">Подключение к лаунчеру…</div>
+    </div>
+
+  </div>
+</div>
+<script>/*__SCRIPT__*/</script>
+</body>
+</html>

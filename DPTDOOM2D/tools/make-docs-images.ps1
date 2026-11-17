@@ -149,14 +149,49 @@ if (Test-Path $launcher)
 	$form = Start-Process -FilePath $launcher -PassThru
 	try
 	{
-		Start-Sleep -Seconds 3
+		Start-Sleep -Seconds 4
+
 		& powershell -ExecutionPolicy Bypass -File $shot -ProcessId $form.Id `
-			-Out (Join-Path $OutDir 'launcher.png') -WindowTitle 'DPT.DOOM 2D Launcher' | Out-Null
+			-Out (Join-Path $OutDir 'launcher.png') -WindowTitle 'DPT.DOOM 2D Launcher' `
+			-DelayMs 1200 -Width 1000 -Height 900 | Out-Null
 		Write-Host '  launcher.png'
 	}
 	finally
 	{
 		if (-not $form.HasExited) { $form.Kill() }
+	}
+
+	# The page is taller than any window that fits a 1080p screen, so the mods
+	# section gets its own capture with the page scrolled to the bottom.
+	$mods = Start-Process -FilePath $launcher -PassThru
+	try
+	{
+		Start-Sleep -Seconds 4
+		& powershell -ExecutionPolicy Bypass -File $shot -ProcessId $mods.Id `
+			-Out (Join-Path $OutDir 'launcher-mods.png') -WindowTitle 'DPT.DOOM 2D Launcher' `
+			-DelayMs 1000 -Width 1000 -Height 900 -Keys 'End' | Out-Null
+		Write-Host '  launcher-mods.png'
+	}
+	finally
+	{
+		if (-not $mods.HasExited) { $mods.Kill() }
+	}
+
+	# The server browser is a separate tab of the same page; the deep link opens
+	# it so the docs can show both halves of the launcher.
+	$env:DPTDOOM2D_LAUNCHER_TAB = 'servers'
+	$servers = Start-Process -FilePath $launcher -PassThru
+	$env:DPTDOOM2D_LAUNCHER_TAB = $null
+	try
+	{
+		Start-Sleep -Seconds 4
+		& powershell -ExecutionPolicy Bypass -File $shot -ProcessId $servers.Id `
+			-Out (Join-Path $OutDir 'launcher-servers.png') -WindowTitle 'DPT.DOOM 2D Launcher' -DelayMs 1200 | Out-Null
+		Write-Host '  launcher-servers.png'
+	}
+	finally
+	{
+		if (-not $servers.HasExited) { $servers.Kill() }
 	}
 }
 

@@ -68,6 +68,12 @@
       folder of packs costs nothing at startup.
     -->
     <None Include="Maps\*.wad" Link="Data\Maps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+
+    <!--
+      Mods the player dropped in: WAD, PK3 or ZIP. The launcher lists them and
+      passes the ticked ones as -file, so this folder is the whole install step.
+    -->
+    <None Include="Mods\*" Link="Data\Mods\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

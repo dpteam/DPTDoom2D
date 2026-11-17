@@ -64,14 +64,18 @@ dist/DPTDOOM2D/
 │  ├─ doom2d.wad             базовые данные
 │  ├─ default.cfg            привязки и настройки
 │  ├─ Music/                 30 XM-треков
-│  └─ Maps/                  166 паков кастомных карт
+│  ├─ Maps/                  166 паков кастомных карт
+│  └─ Mods/                  сюда кладутся моды (WAD, PK3)
+├─ Storage/                  создаётся при первом запуске
+│  ├─ Logs/                  логи игры
+│  └─ webview/               страница лаунчера
 ├─ README.md
 ├─ LICENSE
 └─ CHANGELOG.md
 ```
 
 Папку можно копировать на любую Windows-машину с .NET Framework 4.0 — установка
-не нужна. Логи пишутся в `Logs/` рядом с exe.
+не нужна. Логи пишутся в `Storage/Logs` рядом с exe.
 
 ## Проверки без окна
 
@@ -86,7 +90,11 @@ dptdoom2d.exe --switches <карта>
 dptdoom2d.exe --walls <карта>
 dptdoom2d.exe --music <трек>
 dptdoom2d.exe --sounds
+dptdoom2d.exe --cheats
 dptdoom2d.exe --maps
+dptdoom2d.exe --modbuild <out.pk3> <dir>...
+dptdoom2d.exe --modlist <file.pk3>
+dptdoom2d.exe --modunpack <file.pk3> <dir>
 dptdoom2d.exe --dump <ресурс> <out.bmp>
 dptdoom2d.exe --list
 ```
@@ -110,6 +118,12 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 проверки, которые ловят «звука нет» и «музыка молчит».
 
 `--maps` печатает библиотеку паков и уровни в текущем наборе WAD.
+
+`--cheats` прогоняет все девять кодов оригинала и проверяет эффект каждого.
+Кириллические коды — это те же клавиши, поэтому проверка покрывает обе раскладки.
+
+`--modbuild` / `--modlist` / `--modunpack` — модкит: собрать PK3 из папки,
+посмотреть, что из него загрузится, распаковать обратно.
 
 Все headless-режимы пересеивают ГПСЧ фиксированным зерном (`Headless.Seed`),
 поэтому одна и та же команда всегда даёт один и тот же кадр. На этом держатся и
@@ -135,7 +149,7 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 1. `fetch-data.ps1` — данные из upstream
 2. `dotnet build DPTDOOM2D.slnx` — все четыре проекта
 3. `build.ps1` — 19 карт, сохранения, фронтенд, 140 звуков, 30 треков (из файлов
-   и из WAD), 166 паков карт
+   и из WAD), 166 паков карт, 9 читов, модкит
 4. `build.ps1 -Net` — сеть и релей
 5. `build.ps1 -Pack` → артефакт **DPTDOOM2D-win64**
 6. `make-docs-images.ps1` → артефакт **docs-images**

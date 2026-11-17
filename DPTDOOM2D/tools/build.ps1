@@ -146,6 +146,35 @@ try
 		if ($mapPacks) { Write-Host "  map packs: $($mapPacks.Count - $packFailures)/$($mapPacks.Count) ok" -ForegroundColor DarkGray }
 		$failed += $packFailures
 
+		# Cheats: every original code has to fire. The Cyrillic ones are the same
+		# key presses, so this covers both layouts.
+		& $exe --cheats 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  cheats FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  cheats ok' -ForegroundColor DarkGray }
+
+		# Mod kit: build a PK3 out of a map pack, list it, and load it back. This is
+		# the whole mod workflow in one round trip.
+		$modSrc = Join-Path $tmp 'modsrc'
+		$modPk3 = Join-Path $tmp 'mod.pk3'
+		Remove-Item $modSrc -Recurse -Force -ErrorAction SilentlyContinue
+		New-Item -ItemType Directory -Path (Join-Path $modSrc 'maps') -Force | Out-Null
+		$samplePack = Get-ChildItem (Join-Path $root 'Maps') -Filter *.wad -ErrorAction SilentlyContinue | Select-Object -First 1
+		if ($samplePack)
+		{
+			Copy-Item $samplePack.FullName (Join-Path $modSrc 'maps\sample.wad')
+			Remove-Item $modPk3 -Force -ErrorAction SilentlyContinue
+
+			& $exe --modbuild $modPk3 $modSrc 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  modbuild FAILED' -ForegroundColor Red; $failed++ }
+
+			& $exe --modlist $modPk3 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  modlist FAILED' -ForegroundColor Red; $failed++ }
+
+			& $exe -file $modPk3 --simulate 40 (Join-Path $tmp 'mod.bmp') 1 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  pk3 load FAILED' -ForegroundColor Red; $failed++ }
+			else { Write-Host '  mod kit ok' -ForegroundColor DarkGray }
+		}
+
 		if ($failed -gt 0) { Fail "$failed check(s) failed" }
 		Write-Host '  all checks passed' -ForegroundColor Green
 

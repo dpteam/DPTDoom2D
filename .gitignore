@@ -3,7 +3,7 @@ bin/
 obj/
 dist/
 
-# Local run artefacts (the game writes these next to the exe)
+# Local run artefacts (the game writes these under Storage/)
 Storage/
 Screenshots/
 launcher.cfg
