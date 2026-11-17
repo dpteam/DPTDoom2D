@@ -342,6 +342,48 @@ html.light .mod { border-bottom-color: #ececf0; color: #3c4655; }
 
 .mods-empty { padding: 10px; font-size: 12px; color: #66707f; }
 
+/* ---------- prototypes ---------- */
+
+.protos { margin-top: 12px; }
+
+.proto {
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid #2c3343;
+  border-radius: 5px;
+  background: #12151e;
+}
+
+html.light .proto { border-color: #d8d8de; background: #f6f7f9; }
+
+.proto .head { margin-bottom: 4px; }
+
+.proto .name {
+  font-size: 14px;
+  font-weight: bold;
+  color: #edf1fa;
+  margin-right: 10px;
+}
+
+html.light .proto .name { color: #232a35; }
+
+.proto .src {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  color: #66707f;
+}
+
+.proto .text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9aa7bd;
+  margin-bottom: 8px;
+}
+
+html.light .proto .text { color: #5b6673; }
+
+.proto button { padding: 6px 14px; }
+
 .server {
   padding: 8px 10px;
   border-bottom: 1px solid #242b39;

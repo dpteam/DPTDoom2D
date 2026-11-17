@@ -47,6 +47,8 @@
   `Data/Maps`, выбирается через `-map-pack` или в лаунчере.
 - **Моды в PK3** — обычный ZIP с WAD'ами и отдельными ресурсами; модкит
   (`--modbuild`, `--modlist`, `--modunpack`) встроен в игру.
+- **Витрина прототипов** — шесть программ 1995-96 (дым, генераторы мира,
+  платформер, лабиринт, сборщик WAD), переписанных на C#.
 - **20 видов монстров** с полным AI: погоня, стрельба, ближний бой, оживление
   трупов архивилом, «потерянные души» из Pain Elemental.
 - **11 видов оружия**, броня, аптечки, ключи, powerup'ы.
@@ -142,6 +144,24 @@ dptdoom2d.exe --modunpack mymod.pk3 modsrc\  # распаковать обрат
 
 Подробности и структура мода — в [docs/MODS.md](docs/MODS.md).
 
+## Витрина прототипов
+
+В `refs/D2D_Also` лежит рабочий архив Prikol Software: кроме Doom2D там собраны
+программы, из которых игра выросла. Шесть из них переписаны на C# и запускаются
+из лаунчера (**Прототипы**) или командой:
+
+```powershell
+dptdoom2d.exe --proto-list      # список
+dptdoom2d.exe --proto truba     # дым в трубе
+dptdoom2d.exe --proto planet    # генератор планеты
+```
+
+`TRUBA` (дым, отсюда `smoke.c`), `PLANET` (континенты и климат), `LANDGEN`
+(фрактальный ландшафт), `ESCAPADE` (платформер, прямой предок Doom2D),
+`VGA MAZE` (тайловый лабиринт) и `DOOM WAD MAKER` (сборщик WAD'ов).
+Данные игры им не нужны — артворк вкомпилирован в exe. Подробности —
+в [docs/PROTOTYPES.md](docs/PROTOTYPES.md).
+
 ## Сетевая игра
 
 **По локальной сети** — хост ждёт, гость подключается по адресу:
@@ -188,6 +208,7 @@ dptdoom2d.exe -net join -master 1.2.3.4:25135 -relay-session <id>
 | [docs/FORMATS.md](docs/FORMATS.md) | WAD, спрайты, карты, сохранения, DMI, XM, DMM |
 | [docs/MAPS.md](docs/MAPS.md) | кастомные карты, библиотека паков, редактор |
 | [docs/MODS.md](docs/MODS.md) | модкит: PK3, сборка, установка |
+| [docs/PROTOTYPES.md](docs/PROTOTYPES.md) | витрина прототипов: что перенесено и как |
 | [docs/LAUNCHER.md](docs/LAUNCHER.md) | лаунчер: HTML-интерфейс, мост, режимы |
 | [docs/BUILDING.md](docs/BUILDING.md) | сборка, упаковка, CI, проверки без окна |
 | [docs/NETWORK.md](docs/NETWORK.md) | протокол, lockstep, мастер, релей |

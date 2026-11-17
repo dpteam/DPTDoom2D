@@ -234,6 +234,7 @@ namespace DPTDOOM2D.Launcher
                     Send("storage", DescribeStorage());
                     Send("hasLog", lastLogDirectory != null ? "1" : "0");
                     Send("running", IsGameRunning() ? "1" : "0");
+                    Send("protos", DescribePrototypes());
                     Send("status", "Готов. Выбери режим и нажми «Запустить игру».\n0");
                     break;
 
@@ -266,6 +267,10 @@ namespace DPTDOOM2D.Launcher
 
                 case "masterrefresh":
                     OnMasterRefresh(payload);
+                    break;
+
+                case "proto":
+                    OnRunPrototype(payload);
                     break;
 
                 case "themesave":
@@ -345,6 +350,67 @@ namespace DPTDOOM2D.Launcher
         private string DescribeStorage()
         {
             return "Лаунчер: " + LauncherSettings.DataDirectory + " · игра пишет логи в Storage\\Logs";
+        }
+
+        /// <summary>
+        /// The prototype showcase, encoded the way ProtoCatalog.Encode writes it:
+        /// one row per prototype, fields separated by tabs, with the command line
+        /// appended for the console-only tools.
+        /// </summary>
+        private string DescribePrototypes()
+        {
+            // The launcher and the game are separate programs, so the catalogue is
+            // duplicated here rather than referenced. It is five rows; keeping the
+            // launcher free of the game assembly is worth it, and --proto-list is
+            // the source of truth if the two ever disagree.
+            return
+                "truba\tTRUBA — дым в трубе\toldprog/watcom/PROG/TRUBA\t" +
+                "2000 частиц в туннеле, спрайты SMOKE.VGA. Отсюда вырос smoke.c в Doom2D.\t1\t\n" +
+                "planet\tPLANET — генератор мира\toldprog/watcom/PROG/PLANET\t" +
+                "Континенты, климат, ветер и осадки на сетке 256x256 с замыканием краёв.\t1\t\n" +
+                "landgen\tLANDGEN — фрактальный ландшафт\toldprog/watcom/PROG/TEST\t" +
+                "256x256 высот из value-шума: холмы, скалы, лес и лёд отдельными слоями.\t1\t\n" +
+                "escapade\tESCAPADE — платформер\toldprog/TC/PROGS/ESCAPADE\t" +
+                "Поле 64x64, герой с анимациями, спрайты HERO1.VGA. Прямой предок Doom2D.\t1\t\n" +
+                "vgamaze\tVGA MAZE — лабиринт\toldprog/TC/PROGS/VGAMAZE\t" +
+                "Случайные тайлы 64x64 со скроллом: первая программа с формой будущего Doom2D.\t1\t\n" +
+                "doomwad\tDOOM WAD MAKER — сборщик WAD\toldprog/TC/PROGS/DOOMWAD\t" +
+                "Собирает WAD из списка файлов (MAKEWAD.C, 1995).\t0\t--wadbuild <list.lst>";
+        }
+
+        private void OnRunPrototype(string id)
+        {
+            if (string.IsNullOrEmpty(id) || id.Trim().Length == 0)
+            {
+                Send("status", "Не выбран прототип.\n1");
+                return;
+            }
+
+            string exe = settings.GamePath;
+
+            if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) exe = LauncherSettings.FindGame();
+
+            if (exe == null)
+            {
+                Send("status", "dptdoom2d.exe не найден рядом с лаунчером.\n1");
+                return;
+            }
+
+            var info = new ProcessStartInfo();
+            info.FileName = exe;
+            info.Arguments = "--proto " + id.Trim();
+            info.WorkingDirectory = Path.GetDirectoryName(exe);
+            info.UseShellExecute = false;
+
+            try
+            {
+                Process.Start(info);
+                Send("status", "Прототип " + id.Trim() + " запущен в отдельном окне. ESC закрывает.\n0");
+            }
+            catch (Exception e)
+            {
+                Send("status", "Не удалось запустить прототип: " + e.Message + "\n1");
+            }
         }
 
         private void OnBrowse()

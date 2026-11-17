@@ -38,6 +38,7 @@
     var enabledMods = [];
     var servers = [];
     var serverFilter = '';
+    var protos = [];
 
     function $(id) { return document.getElementById(id); }
 
@@ -241,6 +242,31 @@
 
     // ---------------------------------------------------------------- servers
 
+    // ---------------------------------------------------------------- protos
+
+    function parseProtos(payload) {
+        protos = [];
+
+        if (!payload) { return; }
+
+        var rows = String(payload).split('\n');
+
+        for (var i = 0; i < rows.length; ++i) {
+            if (!rows[i]) { continue; }
+
+            var f = rows[i].split('\t');
+
+            protos.push({
+                id: f[0] || '',
+                title: f[1] || '?',
+                source: f[2] || '',
+                description: f[3] || '',
+                visual: f[4] !== '0',
+                usage: f[5] || ''
+            });
+        }
+    }
+
     function renderServers() {
         var list = $('serverList');
         var filter = serverFilter.toLowerCase();
@@ -300,8 +326,7 @@
             .replace(/"/g, '&quot;');
     }
 
-    function parseServers(payload) {
-        servers = [];
+    function parseServers(payload) {        servers = [];
 
         if (!payload) { return; }
 
@@ -336,10 +361,49 @@
     function setTab(which) {
         $('playPane').className = which === 'play' ? '' : 'hidden';
         $('serverBrowser').className = which === 'servers' ? '' : 'hidden';
+        $('protoBrowser').className = which === 'protos' ? '' : 'hidden';
 
         $('navPlay').className = which === 'play' ? 'active' : '';
         $('navServers').className = which === 'servers' ? 'active' : '';
+        $('navProtos').className = which === 'protos' ? 'active' : '';
+
+        // The footer's launch button belongs to the game tabs, not the showcase.
+        $('launch').className = which === 'protos' ? 'launch primary hidden' : 'launch primary';
     }
+
+    // ---------------------------------------------------------------- protos
+
+    function renderProtos() {
+        var list = $('protoList');
+
+        if (protos.length === 0) {
+            list.innerHTML = 'Список пуст: билд собран без прототипов?';
+            return;
+        }
+
+        var html = '';
+
+        for (var i = 0; i < protos.length; ++i) {
+            var p = protos[i];
+
+            html += '<div class="proto">' +
+                '<div class="head"><span class="name">' + escapeHtml(p.title) + '</span>' +
+                '<span class="src">' + escapeHtml(p.source) + '</span></div>' +
+                '<div class="text">' + escapeHtml(p.description) + '</div>' +
+                (p.visual
+                    ? '<button onclick="dptdoom2dRunProto(\'' + p.id + '\')" type="button">Запустить</button>'
+                    : '<span class="hint">Консольный инструмент: <code>dptdoom2d.exe ' +
+                      escapeHtml(p.usage) + '</code></span>') +
+                '</div>';
+        }
+
+        list.innerHTML = html;
+    }
+
+    window.dptdoom2dRunProto = function (id) {
+        post('proto', id);
+        showStatus('Запускаю прототип ' + id + ' в отдельном окне…', false);
+    };
 
     function applyTheme(theme) {
         document.documentElement.className = theme === 'light' ? 'light' : '';
@@ -351,6 +415,7 @@
     function wire() {
         $('navPlay').onclick = function () { setTab('play'); };
         $('navServers').onclick = function () { setTab('servers'); };
+        $('navProtos').onclick = function () { setTab('protos'); };
 
         $('themeToggle').onclick = function () {
             var next = document.documentElement.className === 'light' ? 'dark' : 'light';
@@ -503,6 +568,12 @@
             return;
         }
 
+        if (verb === 'protos') {
+            parseProtos(payload);
+            renderProtos();
+            return;
+        }
+
         if (verb === 'fatal') {
             $('fatal').className = '';
             $('fatal').innerHTML = escapeHtml(payload);
@@ -519,7 +590,7 @@
         // Deep link: #servers opens the server browser. Useful on its own, and it
         // gives the screenshot tool a way to reach that tab.
         var hash = String(window.location.hash || '').replace('#', '');
-        setTab(hash === 'servers' ? 'servers' : 'play');
+        setTab(hash === 'servers' ? 'servers' : (hash === 'protos' ? 'protos' : 'play'));
 
         post('ready', '');
     }

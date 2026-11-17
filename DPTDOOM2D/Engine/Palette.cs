@@ -29,6 +29,18 @@ namespace DPTDOOM2D.Engine
         /// <summary>mixmap[256][256]: smoke dissolve table.</summary>
         public static readonly byte[] MixMap = new byte[256 * 256];
 
+        /// <summary>
+        /// True once MIXMAP has been read from the WAD.
+        ///
+        /// The prototypes run without a WAD, so the dissolve table would be a
+        /// block of zeros and every smoke pixel would come out black. Callers
+        /// check this and fall back to a simple blend.
+        /// </summary>
+        public static bool MixMapLoaded { get; private set; }
+
+        /// <summary>True once COLORMAP has been read (shading and water).</summary>
+        public static bool ClrMapLoaded { get; private set; }
+
         /// <summary>BGRA per index, ready for the DIB blitter.</summary>
         public static readonly uint[] Colors = new uint[256];
 
@@ -48,11 +60,25 @@ namespace DPTDOOM2D.Engine
             Wad.LoadRes(Wad.GetResId("MIXMAP"), MixMap, 0, 0, MixMap.Length);
             Wad.LoadRes(Wad.GetResId("COLORMAP"), ClrMap, 0, 0, ClrMap.Length);
 
-            for (int i = 0; i < 256; ++i)
-                Bright[i] = (byte)(((int)Main[i * 3] + Main[i * 3 + 1] + Main[i * 3 + 2]) * 8 / (63 * 3));
+            MixMapLoaded = true;
+            ClrMapLoaded = true;
 
+            RebuildBright();
             LoadGammaTable();
             SetGamma(0);
+        }
+
+        /// <summary>
+        /// Recomputes <see cref="Bright"/> from the current palette.
+        ///
+        /// Called by Load() and by the prototypes, which install a palette of their
+        /// own: without this the brightness table still describes Doom2D's colours
+        /// and the smoke would fade by the wrong amount.
+        /// </summary>
+        public static void RebuildBright()
+        {
+            for (int i = 0; i < 256; ++i)
+                Bright[i] = (byte)(((int)Main[i * 3] + Main[i * 3 + 1] + Main[i * 3 + 2]) * 8 / (63 * 3));
         }
 
         static void LoadGammaTable()
@@ -97,18 +123,25 @@ namespace DPTDOOM2D.Engine
             return t;
         }
 
-        /// <summary>setgamma: rebuild std_pal and the blitter table.</summary>
+        /// <summary>
+        /// setgamma: rebuild std_pal and the blitter table.
+        ///
+        /// The gamma curves come from gamma.dat, which is loaded with the WAD.
+        /// The prototypes run without a WAD, so a missing table falls back to a
+        /// straight copy: the palette is then exactly what the artwork says.
+        /// </summary>
         public static void SetGamma(int g)
         {
             if (g > 4) g = 4;
             if (g < 0) g = 0;
 
-            byte[] curve = GamCor[g];
+            byte[] curve = GamCor == null || GamCor[g] == null ? null : GamCor[g];
+
             for (int i = 0; i < 256; ++i)
             {
-                Std[i * 3] = curve[Main[i * 3]];
-                Std[i * 3 + 1] = curve[Main[i * 3 + 1]];
-                Std[i * 3 + 2] = curve[Main[i * 3 + 2]];
+                Std[i * 3] = curve == null ? Main[i * 3] : curve[Main[i * 3]];
+                Std[i * 3 + 1] = curve == null ? Main[i * 3 + 1] : curve[Main[i * 3 + 1]];
+                Std[i * 3 + 2] = curve == null ? Main[i * 3 + 2] : curve[Main[i * 3 + 2]];
             }
             RebuildColors();
         }

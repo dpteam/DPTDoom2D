@@ -103,6 +103,23 @@ namespace DPTDOOM2D
                     return ModKit.List(args[i + 1]);
                 if (args[i] == "--modunpack" && i + 2 < args.Length)
                     return ModKit.Unpack(args[i + 1], args[i + 2]);
+                if (args[i] == "--proto-list")
+                    return Prototypes.ProtoCatalog.List();
+                if (args[i] == "--proto" && i + 1 < args.Length)
+                    return RunPrototype(args[i + 1]);
+                if (args[i] == "--wadbuild" && i + 2 < args.Length)
+                {
+                    // --wadbuild <list.lst> takes the original MAKEWAD interface;
+                    // --wadbuild <out.wad> <file>... names the lumps after the files.
+                    if (string.Equals(Path.GetExtension(args[i + 1]), ".lst", StringComparison.OrdinalIgnoreCase))
+                        return Prototypes.WadBuilder.BuildFromList(args[i + 1]);
+
+                    var files = new string[args.Length - i - 2];
+                    Array.Copy(args, i + 2, files, 0, files.Length);
+                    return Prototypes.WadBuilder.BuildFromFiles(args[i + 1], files);
+                }
+                if (args[i] == "--wadlist" && i + 1 < args.Length)
+                    return Prototypes.WadBuilder.List(args[i + 1]);
                 if (args[i] == "--saveload")
                 {
                     Boot();
@@ -150,6 +167,32 @@ namespace DPTDOOM2D
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// --proto &lt;id&gt;: runs one of the DOS-era prototypes in its own window.
+        ///
+        /// These do not need doom2d.wad: each brings its own artwork and palette,
+        /// so a prototype can be tried on a fresh checkout.
+        /// </summary>
+        static int RunPrototype(string id)
+        {
+            Prototypes.ProtoCatalog.Item item = Prototypes.ProtoCatalog.Find(id);
+
+            if (item == null)
+            {
+                Console.WriteLine("prototype '" + id + "' not found; try --proto-list");
+                return 1;
+            }
+
+            if (item.Create == null)
+            {
+                Console.WriteLine(item.Title + " is a console tool:");
+                Console.WriteLine("  " + item.Description);
+                return 0;
+            }
+
+            return Prototypes.ProtoHost.Run(item.Create(), Config.Scale);
         }
 
         /// <summary>Boots the engine far enough to read the WAD, without opening a window.</summary>

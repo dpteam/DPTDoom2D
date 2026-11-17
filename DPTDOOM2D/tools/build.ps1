@@ -175,6 +175,30 @@ try
 			else { Write-Host '  mod kit ok' -ForegroundColor DarkGray }
 		}
 
+		# Prototypes: the catalogue has to be intact, and the WAD builder has to
+		# round-trip a real WAD. The visual demos need a window, so they are not
+		# run here; building the WAD exercises the same code paths they do.
+		& $exe --proto-list 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  proto list FAILED' -ForegroundColor Red; $failed++ }
+
+		$wadSrc = Join-Path $tmp 'wadsrc'
+		$wadOut = Join-Path $tmp 'built.wad'
+		Remove-Item $wadSrc -Recurse -Force -ErrorAction SilentlyContinue
+		Remove-Item $wadOut -Force -ErrorAction SilentlyContinue
+		New-Item -ItemType Directory -Path $wadSrc -Force | Out-Null
+
+		if ($samplePack)
+		{
+			Copy-Item $samplePack.FullName (Join-Path $wadSrc 'MAP01')
+
+			& $exe --wadbuild $wadOut (Join-Path $wadSrc 'MAP01') 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  wadbuild FAILED' -ForegroundColor Red; $failed++ }
+
+			& $exe --wadlist $wadOut 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  wadlist FAILED' -ForegroundColor Red; $failed++ }
+			else { Write-Host '  prototypes ok' -ForegroundColor DarkGray }
+		}
+
 		if ($failed -gt 0) { Fail "$failed check(s) failed" }
 		Write-Host '  all checks passed' -ForegroundColor Green
 

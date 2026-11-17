@@ -95,6 +95,11 @@ dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
 dptdoom2d.exe --modunpack <file.pk3> <dir>
+dptdoom2d.exe --proto-list
+dptdoom2d.exe --proto <id>
+dptdoom2d.exe --wadbuild <list.lst>
+dptdoom2d.exe --wadbuild <out.wad> <file>...
+dptdoom2d.exe --wadlist <file.wad>
 dptdoom2d.exe --dump <ресурс> <out.bmp>
 dptdoom2d.exe --list
 ```
@@ -125,6 +130,10 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 `--modbuild` / `--modlist` / `--modunpack` — модкит: собрать PK3 из папки,
 посмотреть, что из него загрузится, распаковать обратно.
 
+`--proto-list` и `--proto <id>` — витрина прототипов (см. [PROTOTYPES.md](PROTOTYPES.md)).
+`--wadbuild` / `--wadlist` — сборщик WAD из `DOOMWAD/MAKEWAD.C`, перенесённый
+как инструмент: собирает WAD из списка файлов и печатает каталог.
+
 Все headless-режимы пересеивают ГПСЧ фиксированным зерном (`Headless.Seed`),
 поэтому одна и та же команда всегда даёт один и тот же кадр. На этом держатся и
 проверки в CI, и скриншоты в `docs/images`: их можно перегенерировать и увидеть
@@ -149,7 +158,7 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 1. `fetch-data.ps1` — данные из upstream
 2. `dotnet build DPTDOOM2D.slnx` — все четыре проекта
 3. `build.ps1` — 19 карт, сохранения, фронтенд, 140 звуков, 30 треков (из файлов
-   и из WAD), 166 паков карт, 9 читов, модкит
+   и из WAD), 166 паков карт, 9 читов, модкит, прототипы
 4. `build.ps1 -Net` — сеть и релей
 5. `build.ps1 -Pack` → артефакт **DPTDOOM2D-win64**
 6. `make-docs-images.ps1` → артефакт **docs-images**
@@ -161,6 +170,7 @@ dptdoom2d.exe --simulate 300 out.bmp 1 "5:right,40:fire,44:-fire"
 | `tools/build.ps1` | сборка, проверки, упаковка, запуск |
 | `tools/fetch-data.ps1` | клонировать/обновить `refs/doom2d-rembo` |
 | `tools/make-icon.ps1` | `resources/dptdoom2d.ico` — квадратный кроп 1:1 из титульника (16…256 px) |
+| `tools/make-proto-assets.ps1` | пересобрать `Prototypes/ProtoAssets.cs` из `.VGA` (base64) |
 | `tools/make-docs-images.ps1` | картинки для доков из реального фреймбуфера + оверлей и лаунчер |
 | `tools/screenshot.ps1` | снять клиентскую область окна, опционально «нажав» клавиши |
 | `tools/net-test.ps1` | проверка прямой сетевой сессии |

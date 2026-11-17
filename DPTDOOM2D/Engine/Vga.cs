@@ -228,6 +228,15 @@ namespace DPTDOOM2D.Engine
         public static void SmokeSprFunc(int x, int y, byte c)
         {
             byte t = GetPixel(x, y);
+
+            if (!Palette.MixMapLoaded)
+            {
+                // No WAD, so no dissolve table: a plain weighted blend keeps the
+                // prototypes looking like smoke instead of a black blob.
+                PutPixel(x, y, (byte)(((c & 0x3F) + t) / 2));
+                return;
+            }
+
             c = (byte)(c + Palette.Bright[t]);
             c = (byte)(c + 0x60);
             c ^= 0xF;

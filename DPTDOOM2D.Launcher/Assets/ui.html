@@ -16,6 +16,7 @@
     <div class="nav">
       <button id="navPlay" class="active" type="button">&#9656; Играть</button>
       <button id="navServers" type="button">Серверы</button>
+      <button id="navProtos" type="button">Прототипы</button>
     </div>
 
     <button id="themeToggle" class="theme-button" type="button">Светлая тема</button>
@@ -173,6 +174,17 @@
         <div class="section-head"><h2><span class="num">05</span>Командная строка</h2><small>без shell</small></div>
         <pre id="preview">—</pre>
       </div>
+    </div>
+
+    <!-- ================= prototypes ================= -->
+    <div class="panel hidden" id="protoBrowser">
+      <div class="section-head"><h2>Витрина прототипов</h2><small>программы 1995-96, переписанные на C#</small></div>
+
+      <p class="hint">Это не игры Doom2D, а то, из чего они выросли: дым, генераторы
+        мира, платформер, лабиринт и сборщик WAD. Каждый — отдельное окно, ESC закрывает.
+        Ассеты встроены в exe, данные игры не нужны.</p>
+
+      <div id="protoList" class="protos">Загрузка…</div>
     </div>
 
     <div id="fatal" class="hidden"></div>

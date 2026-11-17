@@ -74,6 +74,7 @@
       passes the ticked ones as -file, so this folder is the whole install step.
     -->
     <None Include="Mods\*" Link="Data\Mods\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+
   </ItemGroup>
 
 </Project>
