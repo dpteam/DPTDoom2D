@@ -97,6 +97,19 @@ try
     }
 
     Write-Host "== session id $sessionId" -ForegroundColor Green
+
+    # Wait for the host's relay channel to exist before the guest asks for it.
+    # Registering on the master and opening the relay host channel are two
+    # separate steps; a guest that arrives in between is told the session does
+    # not exist, falls back to a direct connection, and fails because a relay
+    # host is not listening on its game port at all.
+    foreach ($i in 1..40)
+    {
+        Start-Sleep -Milliseconds 200
+        if ((Test-Path $hostLog) -and ((Get-Content $hostLog -Raw) -match 'relay channel open')) { break }
+        if ($hostProcess.HasExited) { break }
+    }
+
     Write-Host '== guest joining through the relay' -ForegroundColor Cyan
 
     $guestProcess = Start-Process -FilePath $game `

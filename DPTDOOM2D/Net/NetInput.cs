@@ -84,18 +84,31 @@ namespace DPTDOOM2D.Net
                     // Direct first, relay second: a LAN game stays direct and only
                     // an unreachable address costs the extra round trip.
                     Console.WriteLine("net: opening a relay channel through " + settings.Master);
-                    try
+
+                    // A host publishes its session before it opens the relay end,
+                    // so a guest that arrives in that second is told the session
+                    // does not exist. Retry for a moment before giving up: that
+                    // window is short and the alternative is falling back to a
+                    // direct connection that cannot work.
+                    for (int attempt = 1; attempt <= 6 && relay == null; ++attempt)
                     {
-                        var link = Shared.MasterClient.RelayJoin(
-                            SplitHost(settings.Master), SplitPort(settings.Master),
-                            Shared.MasterProtocol.IdFromHex(settings.RelaySession), 8000);
-                        relay = link.Stream;
-                        Console.WriteLine("net: relay channel open");
+                        try
+                        {
+                            var link = Shared.MasterClient.RelayJoin(
+                                SplitHost(settings.Master), SplitPort(settings.Master),
+                                Shared.MasterProtocol.IdFromHex(settings.RelaySession), 8000);
+                            relay = link.Stream;
+                        }
+                        catch (Exception e)
+                        {
+                            if (attempt == 6)
+                                Console.WriteLine("net: relay failed (" + e.Message + "), trying a direct connection");
+                            else
+                                System.Threading.Thread.Sleep(400);
+                        }
                     }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("net: relay failed (" + e.Message + "), trying a direct connection");
-                    }
+
+                    if (relay != null) Console.WriteLine("net: relay channel open");
                 }
 
                 ok = Session.StartGuest(settings.Address, settings.Port, settings.Password, relay,
