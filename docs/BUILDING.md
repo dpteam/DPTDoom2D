@@ -21,6 +21,27 @@
 (папка в `.gitignore`) и обновляет её при повторном запуске. `-Force`
 переклонирует с нуля.
 
+FreeDoom нужен только для `freedoom2d.wad`, и тоже один раз:
+
+```powershell
+./DPTDOOM2D/tools/fetch-freedoom.ps1
+```
+
+Он клонирует `github.com/freedoom/freedoom` в `refs/freedoom`. Репозиторий FreeDoom
+содержит исходники, а не собранный WAD, поэтому скрипт ждёт `freedoom1.wad` в
+`wads/` и подсказывает, где взять релиз, если файла нет.
+
+## Три набора данных
+
+| Файл | Откуда | Как собрать |
+|---|---|---|
+| `doom2d.wad` | оригинал 1996 | `fetch-data.ps1` |
+| `freedoom2d.wad` | FreeDoom, переложенный в формат Doom2D | `--freedoom <doom.wad> <out.wad>` |
+| `aidoom2d.wad` | сгенерирован кодом | `--genwad <seed> <out.wad>` |
+
+Первые два кладутся в `Data` и выбираются в лаунчере. `-Pack` копирует в `dist`
+все наборы, которые нашёл в `Data`.
+
 ## Сборка
 
 ```powershell
@@ -107,6 +128,8 @@ dptdoom2d.exe --sndcheck
 dptdoom2d.exe --wav2dmi <in.wav> <out.dmi|out.wad>
 dptdoom2d.exe --freedoom <doom.wad> <out.wad>
 dptdoom2d.exe --fdcheck <doom.wad>
+dptdoom2d.exe --genwad <seed> <out.wad>
+dptdoom2d.exe --aicheck <seed>
 dptdoom2d.exe --maps
 dptdoom2d.exe --modbuild <out.pk3> <dir>...
 dptdoom2d.exe --modlist <file.pk3>
@@ -184,6 +207,17 @@ DMM, формат Doom2D. Результат читается тем же заг
 поэтому одна и та же команда всегда даёт один и тот же кадр. На этом держатся и
 проверки в CI, и скриншоты в `docs/images`: их можно перегенерировать и увидеть
 настоящий diff, если что-то изменилось.
+
+## CI
+
+`.github/workflows/build.yml` на каждый push и PR: тянет данные, собирает, гоняет
+проверки без окна, сеть и релей, пакует и **собирает оба набора** —
+`freedoom2d.wad` из FreeDoom и `aidoom2d.wad` генератором. Наборы уезжают двумя
+артефактами: `DPTDOOM2D-win` (весь дистрибутив) и `DPTDOOM2D-datasets` (только WAD,
+если кому-то нужен один свободный набор).
+
+Если FreeDoom не скачался, `freedoom2d.wad` пропускается с предупреждением, а
+`aidoom2d.wad` собирается всегда: генератору не нужны чужие данные.
 
 ## Проверки сети
 

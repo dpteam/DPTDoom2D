@@ -202,6 +202,28 @@ try
 			Write-Host '  freedoom converter skipped (no refs/D2D_Also/DOOM/DOOM2.WAD)' -ForegroundColor DarkGray
 		}
 
+		# AIDooM2D: a data set drawn entirely by code. The check builds it and boots
+		# the game on it, which is the only way to know the generator still covers
+		# every resource the engine asks for.
+		& $exe --aicheck 1 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  aidoom generator FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  aidoom generator ok' -ForegroundColor DarkGray }
+
+		# Determinism: the same seed must produce the same bytes, or two players with
+		# "the same" generated set fail the data check instead of playing.
+		$a = Join-Path $env:TEMP 'ai-seed-a.wad'
+		$b = Join-Path $env:TEMP 'ai-seed-b.wad'
+		& $exe --genwad 7 $a 2>&1 | Out-Null
+		& $exe --genwad 7 $b 2>&1 | Out-Null
+		if ((Test-Path $a) -and (Test-Path $b) -and
+		    ((Get-FileHash $a).Hash -eq (Get-FileHash $b).Hash)) {
+			Write-Host '  aidoom determinism ok' -ForegroundColor DarkGray
+		}
+		else {
+			Write-Host '  aidoom determinism FAILED' -ForegroundColor Red; $failed++
+		}
+		Remove-Item $a, $b -ErrorAction SilentlyContinue
+
 		# -data picks the data set, and every name has to resolve to a file: a config
 		# that says freedoom2d must boot on it, not silently fall back to doom2d.
 		& $exe -data doom2d --simulate 10 $env:TEMP\setcheck.bmp 1 2>&1 | Out-Null
@@ -352,6 +374,15 @@ try
 		Copy-Item $master $dist
 		Copy-Item $editor $dist
 		Copy-Item (Join-Path $output 'Data') (Join-Path $dist 'Data') -Recurse
+
+		# The generated data sets travel with the release: they are build outputs,
+		# not source, so they are not in the repository, and without them a player
+		# has only the original artwork to choose from.
+		foreach ($set in @('freedoom2d.wad', 'aidoom2d.wad'))
+		{
+			$generated = Join-Path $output "Data\$set"
+			if (Test-Path $generated) { Copy-Item $generated (Join-Path $dist 'Data') -Force }
+		}
 
 		# GPLv2 requires the license to travel with the binaries.
 		Copy-Item (Join-Path $root '..\LICENSE') $dist

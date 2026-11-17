@@ -24,3 +24,10 @@ refs/
 
 # Node/tool caches some editors drop in
 node_modules/
+
+# Windows shell droppings: Explorer writes Thumbs.db into any folder it has
+# shown pictures from, and desktop.ini whenever a folder gets a custom icon.
+# Both appear the moment someone browses docs/images, and neither is content.
+Thumbs.db
+ehthumbs.db
+desktop.ini

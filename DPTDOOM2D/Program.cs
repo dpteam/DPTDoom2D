@@ -119,6 +119,22 @@ namespace DPTDOOM2D
                     return Headless.MidiToDmmFile(args[i + 1], args[i + 2]);
                 if (args[i] == "--wav2dmi" && i + 2 < args.Length)
                     return Headless.WavToDmiFile(args[i + 1], args[i + 2]);
+                if (args[i] == "--genwad" && i + 2 < args.Length)
+                {
+                    uint genSeed;
+                    if (!uint.TryParse(args[i + 1], out genSeed)) genSeed = 1;
+
+                    Boot();
+                    return Headless.AiDoomBuild(genSeed, args[i + 2]);
+                }
+                if (args[i] == "--aicheck")
+                {
+                    uint checkSeed = 1;
+                    if (i + 1 < args.Length) uint.TryParse(args[i + 1], out checkSeed);
+
+                    Boot();
+                    return Headless.AiDoomCheck(checkSeed);
+                }
                 if (args[i] == "--freedoom" && i + 2 < args.Length)
                 {
                     Boot();

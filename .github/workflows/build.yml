@@ -26,6 +26,13 @@ jobs:
         shell: pwsh
         run: ./DPTDOOM2D/tools/fetch-data.ps1
 
+      # FreeDoom is the free replacement for Doom's data. The converter needs one to
+      # build freedoom2d.wad, and the release ships that set, so CI fetches it rather
+      # than requiring a checkout to carry a 30 MB file.
+      - name: Fetch FreeDoom data
+        shell: pwsh
+        run: ./DPTDOOM2D/tools/fetch-freedoom.ps1
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -60,12 +67,50 @@ jobs:
         shell: pwsh
         run: ./DPTDOOM2D/tools/build.ps1 -SkipTests -Pack
 
+      # The two generated data sets are build outputs, not source: freedoom2d.wad is
+      # FreeDoom's art converted to Doom2D's format, and aidoom2d.wad is drawn by the
+      # generator. Neither is committed, and both ship with the release so a player
+      # has a free alternative to the original artwork.
+      - name: Build data sets
+        shell: pwsh
+        run: |
+          $exe = 'DPTDOOM2D/bin/Release/net40/dptdoom2d.exe'
+          $data = 'DPTDOOM2D/dist/DPTDOOM2D/Data'
+
+          $freedoom = 'refs/freedoom/wads/freedoom1.wad'
+          if (-not (Test-Path $freedoom)) { $freedoom = 'refs/freedoom/freedoom1.wad' }
+
+          if (Test-Path $freedoom) {
+            & $exe --freedoom $freedoom "$data/freedoom2d.wad"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          else {
+            Write-Host 'freedoom2d.wad skipped: refs/freedoom has no WAD'
+          }
+
+          & $exe --genwad 1 "$data/aidoom2d.wad"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Get-ChildItem $data -Filter '*.wad' | Select-Object Name, Length
+
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: DPTDOOM2D-win
           path: DPTDOOM2D/dist/DPTDOOM2D
           if-no-files-found: error
+          retention-days: 30
+
+      # The generated sets on their own, so someone who only wants a free data set
+      # does not have to unpack the whole game to get it.
+      - name: Upload data sets
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPTDOOM2D-datasets
+          path: |
+            DPTDOOM2D/dist/DPTDOOM2D/Data/freedoom2d.wad
+            DPTDOOM2D/dist/DPTDOOM2D/Data/aidoom2d.wad
+          if-no-files-found: warn
           retention-days: 30
 
       # Docs images are generated from the game's own framebuffer; keeping them

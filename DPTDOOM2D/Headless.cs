@@ -1124,6 +1124,126 @@ namespace DPTDOOM2D
         }
 
         /// <summary>
+        /// --genwad &lt;seed&gt; &lt;out.wad&gt;: builds AIDooM2D.
+        ///
+        /// The seed is the whole input: the same number produces the same file, byte for
+        /// byte, on every machine — which is what lets two players load "the same"
+        /// generated set and pass the data check.
+        /// </summary>
+        public static int AiDoomBuild(uint seed, string output)
+        {
+            try
+            {
+                Engine.AiDoom.Report report = Engine.AiDoom.Build(seed, output);
+
+                Console.WriteLine("genwad: seed " + seed + " -> " + Path.GetFileName(output));
+                Console.WriteLine("  " + report.Summary());
+                return 0;
+            }
+            catch (Fatal e)
+            {
+                Console.Error.WriteLine("genwad: " + e.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// --aicheck &lt;seed&gt;: builds AIDooM2D and proves the game runs on it.
+        ///
+        /// Building is not the test. The test is that the result boots as the only data
+        /// set and every level runs with the resource audit on: a missing sprite set is a
+        /// `Fatal` the moment a monster spawns, and a generator that has drifted out of
+        /// step with the engine would otherwise only fail on a player's machine.
+        /// </summary>
+        public static int AiDoomCheck(uint seed)
+        {
+            string temporary = Path.Combine(Path.GetTempPath(), "aidoom2d-check.wad");
+
+            try
+            {
+                if (AiDoomBuild(seed, temporary) != 0) return 1;
+
+                long size = new FileInfo(temporary).Length;
+
+                // Load it the way a player would: as the only data set.
+                Wad.Startup();
+                Wad.AddWad(temporary);
+                Wad.InitWads();
+
+                int lumps = Wad.Entries.Count;
+
+                Palette.Load();
+                Actors.Load();
+
+                Wad.BeginAudit();
+
+                try
+                {
+                    Glob.Reset(Seed);
+                    Vga.Init(320, 200);
+                    Vga.SetRect(0, 320, 0, 200);
+
+                    DGame.TwoPl = false;
+                    DGame.Dm = false;
+                    DGame.State = DGame.GsGame;
+
+                    DGame.Init();
+                    World.LoadLightningSounds();
+
+                    for (int map = 1; map <= Engine.AiLevels.Count; ++map)
+                    {
+                        int res = Wad.FindRes(string.Format("MAP{0:00}", map));
+                        if (res < 0)
+                            throw new Fatal("aicheck: в наборе нет MAP" + map);
+
+                        DGame.Map = map;
+                        Player.Reset();
+                        DGame.Start();
+
+                        for (int tick = 0; tick < 20; ++tick)
+                        {
+                            Kbd.UpdateScripted(tick);
+                            DGame.Act();
+                        }
+                    }
+                }
+                finally
+                {
+                    Engine.ResourceAudit audit = Wad.EndAudit();
+
+                    if (audit == null) throw new Fatal("aicheck: аудит не записался");
+
+                    Console.WriteLine("aicheck: " + (size / 1024) + " KB, " + lumps + " ламп, "
+                        + audit.Total + " запросов");
+                    Console.WriteLine("  спрайтов не хватает: " + audit.MissingSprites
+                        + ", всего не хватает: " + audit.Missing);
+
+                    if (audit.MissingSprites > 0)
+                    {
+                        List<string> missing = audit.MissingNames();
+
+                        for (int i = 0; i < missing.Count && i < 20; ++i)
+                            Console.WriteLine("    " + missing[i]);
+
+                        throw new Fatal("aicheck: не хватает наборов спрайтов");
+                    }
+                }
+
+                Console.WriteLine("aicheck ok");
+                return 0;
+            }
+            catch (Fatal e)
+            {
+                Console.Error.WriteLine("aicheck: " + e.Message);
+                return 1;
+            }
+            finally
+            {
+                try { File.Delete(temporary); } catch { }
+            }
+        }
+
+        /// <summary>
         /// --freedoom &lt;doom.wad&gt; &lt;out.wad&gt;: builds a free data set.
         ///
         /// FreeDoom is a free replacement for Doom's data, and Doom2D inherited Doom's

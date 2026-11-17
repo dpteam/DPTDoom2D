@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Fetch the Doom2D data (WAD, music, gamma table) into refs/doom2d-rembo.
 

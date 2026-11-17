@@ -34,9 +34,17 @@ namespace DPTDOOM2D.Audio
 
         /// <summary>
         /// Fundamental of the generated waveform, chosen so DMM note 44 sounds A3.
-        /// See the class comment for the arithmetic.
+        ///
+        /// The replayer turns a DMM note into `8363 * 2^((note-72)/12)` Hz and steps the
+        /// sample at that rate divided by the output rate, so a sample recorded at
+        /// 11025 Hz is played back at `8363 * 2^((note-72)/12) / 11025` times its own
+        /// pitch. Solving that for A3 at note 44 gives the constant below.
+        ///
+        /// The first version used 2^(-5/12) where the mapping needs 2^(-28/12) and every
+        /// generated instrument came out 23 semitones flat — two octaves down, which
+        /// reads as "the music is broken" rather than "the tuning is off".
         /// </summary>
-        public const double BaseHz = 220.0 * Rate / (8363.0 * 0.7491535384383408);
+        public static readonly double BaseHz = 220.0 * Rate / (8363.0 * Semitone(-28));
 
         /// <summary>
         /// Names of the generated instruments, in order.
@@ -44,6 +52,11 @@ namespace DPTDOOM2D.Audio
         /// Not DMI0001..: those are Doom2D's own samples, and a track that could not be
         /// converted still refers to them. Overwriting them would silently change the
         /// timbre of the tracks that were kept.
+        ///
+        /// AIDooM2D has no original samples at all, so it uses <see cref="PlainNames"/>
+        /// instead — and there the DMI prefix matters for a second reason: the engine's
+        /// "next track" walk skips anything named DMI*, which is how it tells a song
+        /// from an instrument when both live between M_START and M_END.
         /// </summary>
         public static readonly string[] Names =
         {
@@ -53,6 +66,18 @@ namespace DPTDOOM2D.Audio
             "AIDMI04",      // bright pluck
             "AIDMI05",      // soft triangle
             "AIDMI06"       // noise-ish percussion stand-in
+        };
+
+        /// <summary>
+        /// The same instruments under the names the engine itself expects.
+        ///
+        /// Used by a data set that has no original samples to protect, where the
+        /// `DMI` prefix is what keeps `NextMus` from offering an instrument as the next
+        /// song.
+        /// </summary>
+        public static readonly string[] PlainNames =
+        {
+            "DMI0001", "DMI0002", "DMI0003", "DMI0004", "DMI0005", "DMI0006"
         };
 
         /// <summary>
@@ -90,6 +115,12 @@ namespace DPTDOOM2D.Audio
             Square,
             Saw,
             Triangle
+        }
+
+        /// <summary>2^(semitones/12), spelled out because net40 has no such helper.</summary>
+        public static double Semitone(int semitones)
+        {
+            return Math.Pow(2.0, semitones / 12.0);
         }
 
         private static DmiSample Build(double seconds, double brightness, Wave wave)
