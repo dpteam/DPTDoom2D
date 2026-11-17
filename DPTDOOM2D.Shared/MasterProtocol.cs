@@ -54,6 +54,13 @@ namespace DPTDOOM2D.Shared
         public const ushort OpRelayHost = 5;
         public const ushort OpRelayJoin = 6;
 
+        /// <summary>
+        /// The session's data manifest. The host publishes it after registering; a
+        /// client asks for it by session id. Two body shapes share one operation:
+        /// AuthSize bytes or more means "publish", exactly 16 bytes means "fetch".
+        /// </summary>
+        public const ushort OpManifest = 7;
+
         public const ushort StatusOk = 0;
         public const ushort StatusBadRequest = 1;
         public const ushort StatusUnauthorized = 2;
@@ -139,6 +146,12 @@ namespace DPTDOOM2D.Shared
 
                 case OpRelayJoin:
                     return length == 16 ? 16 : -1;
+
+                case OpManifest:
+                    // Publish: auth followed by the manifest. Fetch: a 16-byte id.
+                    if (length == 16) return 16;
+                    if (length >= AuthSize && length <= AuthSize + DataManifest.MaxSize) return length;
+                    return -1;
             }
 
             return -1;
@@ -163,7 +176,7 @@ namespace DPTDOOM2D.Shared
             }
 
             var operation = Get16(header, 6);
-            if (operation < OpList || operation > OpRelayJoin)
+            if (operation < OpList || operation > OpManifest)
             {
                 return "unknown-operation";
             }

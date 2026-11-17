@@ -102,6 +102,11 @@ namespace DPTDOOM2D
                 }
                 if (args[i] == "--datacheck")
                     return Headless.ManifestCheck();
+                if (args[i] == "--netdata" && i + 1 < args.Length)
+                {
+                    Boot();
+                    return NetData(args[i + 1]);
+                }
                 if (args[i] == "--modbuild" && i + 2 < args.Length)
                 {
                     var inputs = new string[args.Length - i - 2];
@@ -204,6 +209,67 @@ namespace DPTDOOM2D
             return Prototypes.ProtoHost.Run(item.Create(), Config.Scale);
         }
 
+        /// <summary>
+        /// --netdata &lt;master&gt;: what each session in the catalogue runs on.
+        ///
+        /// The launcher shows this in the server list; here it is a line per session
+        /// so an operator (or a test) can see why a session would be refused without
+        /// launching the game twice.
+        /// </summary>
+        public static int NetData(string endpoint)
+        {
+            string host;
+            int port;
+
+            int colon = endpoint.LastIndexOf(':');
+            if (colon <= 0 || !int.TryParse(endpoint.Substring(colon + 1), out port))
+            {
+                Console.WriteLine("usage: --netdata <host:port>");
+                return 2;
+            }
+
+            host = endpoint.Substring(0, colon);
+
+            List<Shared.DataManifest.Entry> local = DataFiles.Build();
+            Console.WriteLine("local: " + Shared.DataManifest.Describe(local));
+
+            List<Shared.MasterServerEntry> entries = Shared.MasterClient.List(host, port, 4000);
+            if (entries.Count == 0)
+            {
+                Console.WriteLine("no sessions on " + host + ":" + port);
+                return 0;
+            }
+
+            int mismatched = 0;
+
+            for (int i = 0; i < entries.Count; ++i)
+            {
+                Shared.MasterServerEntry entry = entries[i];
+                List<Shared.DataManifest.Entry> session =
+                    Shared.MasterClient.FetchManifest(host, port, entry.Id, 3000);
+
+                string name = entry.Info == null ? "?" : entry.Info.Name;
+
+                if (session == null)
+                {
+                    Console.WriteLine(name + ": no manifest published");
+                    continue;
+                }
+
+                string difference = Shared.DataManifest.Compare(local, session);
+                if (difference.Length == 0)
+                {
+                    Console.WriteLine(name + ": data matches");
+                    continue;
+                }
+
+                ++mismatched;
+                Console.WriteLine(name + ": " + difference);
+            }
+
+            return mismatched == 0 ? 0 : 1;
+        }
+
         /// <summary>Boots the engine far enough to read the WAD, without opening a window.</summary>
         static void Boot()
         {
@@ -215,7 +281,7 @@ namespace DPTDOOM2D
 
             // The manifest is what a peer has to agree on before a session starts,
             // so every file that takes part in the load is recorded here.
-            DataManifest.AddFile(wad);
+            DataFiles.Add(wad);
 
             // -file <wad> from the command line, exactly as in files.c.
             AddExtraWads();
@@ -258,7 +324,7 @@ namespace DPTDOOM2D
                 try
                 {
                     AddContainer(path);
-                    DataManifest.AddFile(path);
+                    DataFiles.Add(path);
                 }
                 catch (Exception e)
                 {
@@ -278,7 +344,7 @@ namespace DPTDOOM2D
             try
             {
                 AddContainer(pack);
-                DataManifest.AddFile(pack);
+                DataFiles.Add(pack);
                 Log.Info("map pack: " + Path.GetFileName(pack));
             }
             catch (Exception e)

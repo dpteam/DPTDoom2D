@@ -509,7 +509,13 @@ namespace DPTDOOM2D.Launcher
 
         /// <summary>
         /// Queries the master and pushes one tab-separated row per session:
-        /// name, map, map number, players, address, port, relay, id.
+        /// name, map, map number, players, address, port, relay, id, data status,
+        /// what is missing.
+        ///
+        /// The data status is the point of the last two fields: the host publishes
+        /// its manifest, so a session whose mods this installation does not have is
+        /// marked here, before the player clicks anything and long before the game
+        /// would refuse the connection.
         /// </summary>
         private void OnMasterRefresh(string endpoint)
         {
@@ -528,8 +534,11 @@ namespace DPTDOOM2D.Launcher
             try
             {
                 List<MasterServerEntry> entries = MasterClient.List(host, port, 4000);
+                List<DataManifest.Entry> local = settings.BuildManifest();
 
                 var rows = new StringBuilder();
+                int incompatible = 0;
+
                 for (int i = 0; i < entries.Count; ++i)
                 {
                     MasterServerEntry entry = entries[i];
@@ -537,6 +546,10 @@ namespace DPTDOOM2D.Launcher
 
                     string map = entry.Info.MapText ?? "MAP01";
                     int number = ParseMapNumber(map);
+
+                    string status, detail;
+                    DescribeData(host, port, entry, local, out status, out detail);
+                    if (status == "missing") ++incompatible;
 
                     if (rows.Length > 0) rows.Append('\n');
 
@@ -547,15 +560,73 @@ namespace DPTDOOM2D.Launcher
                     rows.Append(entry.AddressText).Append('\t');
                     rows.Append(entry.Info.Port).Append('\t');
                     rows.Append(entry.RelayAvailable ? "1" : "0").Append('\t');
-                    rows.Append(MasterProtocol.IdToHex(entry.Id));
+                    rows.Append(MasterProtocol.IdToHex(entry.Id)).Append('\t');
+                    rows.Append(status).Append('\t');
+                    rows.Append(Safe(detail));
                 }
 
                 Send("servers", rows.ToString());
+
+                if (entries.Count > 0 && incompatible == entries.Count)
+                {
+                    Send("status", "Ни одна сессия не подходит: у вас нет их файлов. "
+                        + "Подробности — в строке сессии.\n1");
+                }
             }
             catch (Exception e)
             {
                 Send("servers", "");
                 Send("status", "Мастер недоступен: " + e.Message + "\n1");
+            }
+        }
+
+        /// <summary>
+        /// Compares one session's published manifest with this installation.
+        ///
+        /// "unknown" means the host published nothing — an older build, or a master
+        /// that does not carry manifests. That is not an error: the handshake still
+        /// checks, the player just does not get a warning in advance.
+        /// </summary>
+        private void DescribeData(string host, int port, MasterServerEntry entry,
+            List<DataManifest.Entry> local, out string status, out string detail)
+        {
+            status = "unknown";
+            detail = "";
+
+            try
+            {
+                List<DataManifest.Entry> session = MasterClient.FetchManifest(host, port, entry.Id, 3000);
+                if (session == null || session.Count == 0) return;
+
+                // The actor digest cannot be reproduced without loading the WAD, so it
+                // is compared only when it is the sole difference — otherwise every
+                // session would look incompatible in the launcher.
+                List<DataManifest.Entry> missing = DataManifest.Missing(session, local);
+                for (int i = missing.Count - 1; i >= 0; --i)
+                    if (string.Equals(missing[i].Name, "actors", StringComparison.OrdinalIgnoreCase))
+                        missing.RemoveAt(i);
+
+                if (missing.Count == 0)
+                {
+                    status = "ok";
+                    return;
+                }
+
+                status = "missing";
+
+                var text = new StringBuilder();
+                for (int i = 0; i < missing.Count && i < 4; ++i)
+                {
+                    if (i > 0) text.Append(", ");
+                    text.Append(missing[i].Name);
+                }
+
+                if (missing.Count > 4) text.Append(" и ещё ").Append(missing.Count - 4);
+                detail = text.ToString();
+            }
+            catch
+            {
+                status = "unknown";
             }
         }
 

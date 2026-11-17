@@ -285,10 +285,21 @@
 
             ++shown;
 
+            // The data badge comes from the manifest the host published: it is the
+            // only warning a player gets before the game refuses the connection.
+            var badge = '';
+
+            if (s.data === 'missing') {
+                badge = '<div class="data-bad">Нет файлов: ' + escapeHtml(s.missing) + '</div>';
+            } else if (s.data === 'ok') {
+                badge = '<div class="data-ok">данные совпадают</div>';
+            }
+
             html += '<div class="server" onclick="dptdoom2dJoinServer(' + i + ')">' +
                 '<div class="name">' + escapeHtml(s.name) + '</div>' +
                 '<div class="meta">' + escapeHtml(s.map) + ' · игроков ' + s.players +
                 ' · ' + (s.relay ? 'через релей' : escapeHtml(s.address)) + '</div>' +
+                badge +
                 '</div>';
         }
 
@@ -319,6 +330,13 @@
         applyState();
         changed();
         setMode('join');
+
+        if (s.data === 'missing') {
+            showStatus('Выбран сервер: ' + s.name + '. У вас нет его файлов: ' + s.missing
+                + '. Игра откажет при подключении.', true);
+            return;
+        }
+
         showStatus('Выбран сервер: ' + s.name + '. Нажми «Запустить игру».', false);
     };
 
@@ -349,7 +367,9 @@
                 address: f[4] || '',
                 port: f[5] || '5041',
                 relay: f[6] === '1',
-                id: f[7] || ''
+                id: f[7] || '',
+                data: f[8] || 'unknown',
+                missing: f[9] || ''
             });
         }
     }

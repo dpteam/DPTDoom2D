@@ -321,6 +321,22 @@ html.light pre { background: #f6f7f9; border-color: #d8d8de; color: #1f6b34; }
 
 html.light .server-list { border-color: #ccd2dc; background: #f6f7f9; color: #5b6673; }
 
+/* Data status: what the host published versus what this install has. */
+.data-bad {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #ff6b78;
+}
+
+.data-ok {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #6fd08c;
+}
+
+html.light .data-bad { color: #b3261e; }
+html.light .data-ok { color: #1e7a3c; }
+
 .mods-head { margin-top: 14px; }
 
 .mods { margin-top: 10px; border: 1px solid #333c4f; border-radius: 4px; max-height: 150px; overflow-y: auto; }

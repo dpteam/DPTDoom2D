@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using DPTDOOM2D.Shared;
 
 namespace DPTDOOM2D.Launcher
 {
@@ -322,6 +323,46 @@ namespace DPTDOOM2D.Launcher
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// What this installation would bring to a session: the WAD, the mods that
+        /// are ticked, the map pack, and the actor digest.
+        ///
+        /// It mirrors what the game puts in its own manifest, so a session's list can
+        /// be compared here — before anyone connects. The actor digest cannot be
+        /// computed without loading the WAD, so it is left out; a mod that only
+        /// changes actors.txt inside a PK3 still shows up, because the PK3 itself is
+        /// hashed.
+        /// </summary>
+        public List<DataManifest.Entry> BuildManifest()
+        {
+            var entries = new List<DataManifest.Entry>();
+
+            string game = string.IsNullOrEmpty(GamePath) ? FindGame() : GamePath;
+            if (string.IsNullOrEmpty(game)) return entries;
+
+            string data = Path.Combine(Path.GetDirectoryName(game), "Data");
+
+            string wad = Path.Combine(data, "doom2d.wad");
+            DataManifest.Entry main = DataManifest.HashFile(wad);
+            if (main != null) entries.Add(main);
+
+            // Mods in the order they will be passed as -file: the order decides
+            // which resource wins, so it is part of the fingerprint.
+            for (int i = 0; i < Mods.Count; ++i)
+            {
+                DataManifest.Entry mod = DataManifest.HashFile(Path.Combine(ModsDirectory, Mods[i]));
+                if (mod != null) entries.Add(mod);
+            }
+
+            if (!string.IsNullOrEmpty(MapPack))
+            {
+                DataManifest.Entry pack = DataManifest.HashFile(Path.Combine(data, "Maps", MapPack));
+                if (pack != null) entries.Add(pack);
+            }
+
+            return entries;
         }
 
         /// <summary>WADs available in the game's Data/Maps folder, as plain names.</summary>

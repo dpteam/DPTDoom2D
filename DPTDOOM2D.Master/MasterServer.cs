@@ -361,6 +361,37 @@ namespace DPTDOOM2D.Master
                     break;
                 }
 
+                case MasterProtocol.OpManifest:
+                {
+                    // One operation, two shapes: a host publishing (auth + manifest)
+                    // and a client fetching by session id (16 bytes). A host could do
+                    // both with the auth body, but then a publish would look like a
+                    // fetch for a session whose id happens to equal the token prefix.
+                    if (body.Length >= MasterProtocol.AuthSize)
+                    {
+                        var status = directory.PublishManifest(host, body, body, body.Length, now);
+                        if (status == MasterProtocol.StatusOk)
+                        {
+                            log.Event(Describe(host, remote) + " published its data manifest ("
+                                + (body.Length - MasterProtocol.AuthSize) + " bytes)");
+                        }
+
+                        Reply(stream, operation, new byte[0], status);
+                        break;
+                    }
+
+                    if (body.Length < 16)
+                    {
+                        Reply(stream, operation, new byte[0], MasterProtocol.StatusBadRequest);
+                        break;
+                    }
+
+                    var id = new byte[16];
+                    Array.Copy(body, id, 16);
+                    Reply(stream, operation, directory.GetManifest(id), MasterProtocol.StatusOk);
+                    break;
+                }
+
                 default:
                     Reply(stream, operation, new byte[0], MasterProtocol.StatusBadRequest);
                     break;

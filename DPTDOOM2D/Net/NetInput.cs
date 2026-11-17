@@ -4,6 +4,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using DPTDOOM2D.Engine;
 
 namespace DPTDOOM2D.Net
@@ -179,6 +180,11 @@ namespace DPTDOOM2D.Net
                 Console.WriteLine("net: registered on the master, session id " + sessionId);
                 Console.WriteLine("net: share this id to be joined through the relay");
 
+                // Publish what this session runs on, so a guest's launcher can say
+                // "you are missing mod.pk3" before anyone connects. A master that
+                // does not know the operation ignores it; the handshake still checks.
+                PublishManifest(host, port);
+
                 return true;
             }
             catch (Exception e)
@@ -186,6 +192,34 @@ namespace DPTDOOM2D.Net
                 Console.WriteLine("net: master registration failed: " + e.Message);
                 Lease = null;
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Publishes this session's data manifest to the master.
+        ///
+        /// Best effort: a failure means a guest's launcher cannot warn them ahead of
+        /// time, not that the session is broken — the handshake still compares.
+        /// </summary>
+        private static void PublishManifest(string host, int port)
+        {
+            try
+            {
+                List<Shared.DataManifest.Entry> manifest = DataFiles.Build();
+                byte[] encoded = Shared.DataManifest.Encode(manifest);
+
+                if (Shared.MasterClient.PublishManifest(host, port, Lease.Auth, encoded, 4000))
+                {
+                    Console.WriteLine("net: published the data manifest: " + Shared.DataManifest.Describe(manifest));
+                }
+                else
+                {
+                    Console.WriteLine("net: the master does not accept a data manifest; guests will find out on connect");
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("net: could not publish the data manifest: " + e.Message);
             }
         }
 

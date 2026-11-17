@@ -161,4 +161,59 @@ else
     exit 1
 }
 
+# ---------------------------------------------------------------- catalogue
+#
+# The host publishes its manifest, so a launcher can warn a player BEFORE they
+# connect. --netdata is the console view of the same data: a line per session
+# saying whether this installation matches it.
+
+foreach ($candidate in $Port..($Port + 40))
+{
+    if (-not (Get-NetTCPConnection -LocalPort $candidate -ErrorAction SilentlyContinue))
+    {
+        $Port = $candidate
+        break
+    }
+}
+
+Write-Host '== catalogue knows the data' -ForegroundColor Cyan
+
+$masterPort = $Port + 10
+while (Get-NetTCPConnection -LocalPort $masterPort -ErrorAction SilentlyContinue) { $masterPort += 10 }
+$relayPort = $masterPort + 1
+
+$masterExe = Join-Path $root '..\DPTDOOM2D.Master\bin\Release\net40\dptdoom2d-master.exe'
+$masterLog = Join-Path $Out 'catalogue-master.log'
+
+$masterProcess = Start-Process -FilePath $masterExe `
+    -ArgumentList '--bind', '127.0.0.1', '--port', $masterPort, '--relay-port', $relayPort `
+    -PassThru -RedirectStandardOutput $masterLog -RedirectStandardError "$masterLog.err"
+
+Start-Sleep -Seconds 2
+
+$endpoint = '127.0.0.1:' + $masterPort
+$hostLog = Join-Path $Out 'catalogue-host.log'
+
+$hostProcess = Start-Process -FilePath $exe `
+    -ArgumentList '-net', 'host', '-port', $Port, '-map', '1', '-scale', '1', '-master', $endpoint, '-relay' `
+    -PassThru -RedirectStandardOutput $hostLog -RedirectStandardError "$hostLog.err"
+
+Start-Sleep -Seconds 4
+
+$catalogue = & $exe --netdata $endpoint 2>&1 | Out-String
+
+foreach ($p in $hostProcess, $masterProcess) { if ($p -and -not $p.HasExited) { $p.Kill() } }
+
+if ($catalogue -match 'data matches')
+{
+    Write-Host '== the session advertises matching data' -ForegroundColor Green
+}
+else
+{
+    Write-Host '== the catalogue did not report matching data' -ForegroundColor Red
+    $catalogue -split "?
+" | Select-Object -Last 6
+    exit 1
+}
+
 exit 0

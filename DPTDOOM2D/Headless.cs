@@ -576,51 +576,51 @@ namespace DPTDOOM2D
         {
             int failed = 0;
 
-            var mine = new List<DataManifest.Entry>();
+            var mine = new List<Shared.DataManifest.Entry>();
             mine.Add(Make("doom2d.wad", 4464286, 0x1122334455667788UL));
             mine.Add(Make("mod.pk3", 1000, 0xAABBCCDDEEFF0011UL));
             mine.Add(Make("actors", 0, 0x0000000000ABCDEFUL));
 
-            var same = DataManifest.Decode(DataManifest.Encode(mine), 0);
+            var same = Shared.DataManifest.Decode(Shared.DataManifest.Encode(mine), 0);
             failed += Check("the manifest survives the wire format", same.Count == mine.Count);
             failed += Check("names survive", same[1].Name == "mod.pk3");
             failed += Check("sizes survive", same[0].Size == 4464286);
             failed += Check("hashes survive", same[1].Hash == 0xAABBCCDDEEFF0011UL);
 
-            failed += Check("identical manifests agree", DataManifest.Compare(mine, same).Length == 0);
+            failed += Check("identical manifests agree", Shared.DataManifest.Compare(mine, same).Length == 0);
 
-            var missing = new List<DataManifest.Entry>();
+            var missing = new List<Shared.DataManifest.Entry>();
             missing.Add(mine[0]);
             missing.Add(mine[2]);
 
-            string text = DataManifest.Compare(mine, missing);
+            string text = Shared.DataManifest.Compare(mine, missing);
             failed += Check("a missing mod is named",
                 text.IndexOf("mod.pk3", StringComparison.Ordinal) >= 0);
 
             // Same three files, mod and actors swapped: -file order decides which
             // resource wins, so this is a different installation.
-            var swapped = new List<DataManifest.Entry>();
+            var swapped = new List<Shared.DataManifest.Entry>();
             swapped.Add(mine[0]);
             swapped.Add(mine[2]);
             swapped.Add(mine[1]);
 
-            text = DataManifest.Compare(mine, swapped);
+            text = Shared.DataManifest.Compare(mine, swapped);
             failed += Check("a different load order is reported",
                 text.IndexOf("order", StringComparison.OrdinalIgnoreCase) >= 0);
 
-            var edited = new List<DataManifest.Entry>();
+            var edited = new List<Shared.DataManifest.Entry>();
             edited.Add(mine[0]);
             edited.Add(Make("mod.pk3", 1000, 0x9999999999999999UL));
             edited.Add(mine[2]);
 
-            text = DataManifest.Compare(mine, edited);
+            text = Shared.DataManifest.Compare(mine, edited);
             failed += Check("an edited file is reported as different contents",
                 text.IndexOf("different contents", StringComparison.Ordinal) >= 0);
 
             // The digest has to change when the data does, or the per-tick checksum
             // would not notice a swap.
             failed += Check("the digest depends on the data",
-                DataManifest.Digest(mine) != DataManifest.Digest(edited));
+                Shared.DataManifest.Digest(mine) != Shared.DataManifest.Digest(edited));
 
             Console.WriteLine(failed == 0
                 ? "manifest: wire format and comparison ok"
@@ -629,9 +629,9 @@ namespace DPTDOOM2D
             return failed == 0 ? 0 : 1;
         }
 
-        private static DataManifest.Entry Make(string name, long size, ulong hash)
+        private static Shared.DataManifest.Entry Make(string name, long size, ulong hash)
         {
-            var entry = new DataManifest.Entry();
+            var entry = new Shared.DataManifest.Entry();
             entry.Name = name;
             entry.Size = size;
             entry.Hash = hash;

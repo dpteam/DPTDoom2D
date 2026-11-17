@@ -99,6 +99,79 @@ namespace DPTDOOM2D.Shared
         }
 
         /// <summary>
+        /// Publishes this session's data manifest, so a launcher can tell a player
+        /// which files they are missing before they even try to connect.
+        ///
+        /// Failure is not fatal: the handshake still compares manifests, so an
+        /// unpublished session behaves exactly as it did before this existed.
+        /// </summary>
+        public static bool PublishManifest(string host, int port, byte[] auth, byte[] manifest, int timeoutMs)
+        {
+            if (auth == null || auth.Length < MasterProtocol.AuthSize)
+            {
+                return false;
+            }
+
+            if (manifest == null)
+            {
+                manifest = new byte[0];
+            }
+
+            if (manifest.Length > DataManifest.MaxSize)
+            {
+                return false;
+            }
+
+            var body = new byte[MasterProtocol.AuthSize + manifest.Length];
+            Array.Copy(auth, body, MasterProtocol.AuthSize);
+            Array.Copy(manifest, 0, body, MasterProtocol.AuthSize, manifest.Length);
+
+            try
+            {
+                Exchange(host, port, MasterProtocol.OpManifest, body, timeoutMs);
+                return true;
+            }
+            catch
+            {
+                // A master from before this operation answers "bad request"; the
+                // handshake still compares manifests, so the session works.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The manifest a session published, or null when it published none.
+        ///
+        /// Null and "empty manifest" mean different things: empty is a host that
+        /// says "nothing to compare", null is "this session is gone".
+        /// </summary>
+        public static List<DataManifest.Entry> FetchManifest(string host, int port, byte[] sessionId, int timeoutMs)
+        {
+            if (sessionId == null || sessionId.Length < 16)
+            {
+                return null;
+            }
+
+            var id = new byte[16];
+            Array.Copy(sessionId, id, 16);
+
+            try
+            {
+                var body = Exchange(host, port, MasterProtocol.OpManifest, id, timeoutMs);
+                if (body == null || body.Length == 0)
+                {
+                    return null;
+                }
+
+                return DataManifest.Decode(body, 0);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Opens the host end of a relay channel. What comes back is already an
         /// established TCP stream: the caller hands it straight to the game
         /// handshake and never speaks the directory protocol again.

@@ -198,6 +198,79 @@ namespace DPTDOOM2D.Master
             return false;
         }
 
+        /// <summary>
+        /// Stores the host's data manifest for its own session.
+        ///
+        /// The body is the auth token followed by the manifest, so a host can only
+        /// publish for the session it registered. An empty manifest is allowed: it
+        /// means "this host does not advertise its data", which the launcher shows
+        /// as "unknown" rather than "compatible".
+        /// </summary>
+        public ushort PublishManifest(byte[] host, byte[] auth, byte[] body, int length, long now)
+        {
+            if (auth == null || auth.Length < MasterProtocol.AuthSize)
+            {
+                return MasterProtocol.StatusBadRequest;
+            }
+
+            if (length < MasterProtocol.AuthSize || length > MasterProtocol.AuthSize + Shared.DataManifest.MaxSize)
+            {
+                return MasterProtocol.StatusBadRequest;
+            }
+
+            Prune(now);
+
+            for (var i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+
+                if (!entry.Active || !SameBytes(entry.Id, auth, 0, 16))
+                {
+                    continue;
+                }
+
+                if (!SameBytes(entry.Host, host, 0, 4) || !SameBytes(entry.Token, auth, 16, 24))
+                {
+                    return MasterProtocol.StatusUnauthorized;
+                }
+
+                entry.ManifestLength = length - MasterProtocol.AuthSize;
+                Array.Clear(entry.Manifest, 0, entry.Manifest.Length);
+                Array.Copy(body, MasterProtocol.AuthSize, entry.Manifest, 0, entry.ManifestLength);
+
+                return MasterProtocol.StatusOk;
+            }
+
+            return MasterProtocol.StatusUnauthorized;
+        }
+
+        /// <summary>The manifest a session published, or an empty array.</summary>
+        public byte[] GetManifest(byte[] id)
+        {
+            if (id == null || id.Length < 16)
+            {
+                return new byte[0];
+            }
+
+            Prune(Now());
+
+            for (var i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+
+                if (!entry.Active || !SameBytes(entry.Id, id, 0, 16) || entry.ManifestLength == 0)
+                {
+                    continue;
+                }
+
+                var manifest = new byte[entry.ManifestLength];
+                Array.Copy(entry.Manifest, manifest, entry.ManifestLength);
+                return manifest;
+            }
+
+            return new byte[0];
+        }
+
         private static long Now()
         {
             return Stopwatch.GetTimestamp() / (Stopwatch.Frequency / 1000);
@@ -311,6 +384,15 @@ namespace DPTDOOM2D.Master
             public readonly byte[] Token = new byte[24];
             public long Expires;
 
+            /// <summary>
+            /// The host's data manifest, published after registration. It is not part
+            /// of the fixed catalogue row: the launcher only needs it for a session
+            /// the player is looking at, and 128 sessions times a kilobyte in every
+            /// list reply would be waste.
+            /// </summary>
+            public readonly byte[] Manifest = new byte[Shared.DataManifest.MaxSize];
+            public int ManifestLength;
+
             public void Clear()
             {
                 Active = false;
@@ -319,6 +401,8 @@ namespace DPTDOOM2D.Master
                 Array.Clear(Info, 0, Info.Length);
                 Array.Clear(Id, 0, Id.Length);
                 Array.Clear(Token, 0, Token.Length);
+                Array.Clear(Manifest, 0, Manifest.Length);
+                ManifestLength = 0;
                 Expires = 0;
             }
         }

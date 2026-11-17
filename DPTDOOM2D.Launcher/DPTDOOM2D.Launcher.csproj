@@ -31,6 +31,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\DPTDOOM2D.Shared\MasterProtocol.cs" Link="Shared\MasterProtocol.cs" />
+    <Compile Include="..\DPTDOOM2D.Shared\DataManifest.cs" Link="Shared\DataManifest.cs" />
     <Compile Include="..\DPTDOOM2D.Shared\MasterSessionInfo.cs" Link="Shared\MasterSessionInfo.cs" />
     <Compile Include="..\DPTDOOM2D.Shared\MasterClient.cs" Link="Shared\MasterClient.cs" />
     <Compile Include="..\DPTDOOM2D.Shared\Branding.cs" Link="Shared\Branding.cs" />

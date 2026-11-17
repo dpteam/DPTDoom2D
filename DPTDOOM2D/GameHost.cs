@@ -42,7 +42,7 @@ namespace DPTDOOM2D
 
             // What the session has to agree on: the WAD, every -file in order, the
             // map pack, and the actor tables (see DataManifest).
-            DataManifest.AddFile(wad);
+            DataFiles.Add(wad);
 
             Program.AddExtraWads();
             Wad.InitWads();

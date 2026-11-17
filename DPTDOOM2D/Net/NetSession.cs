@@ -73,10 +73,10 @@ namespace DPTDOOM2D.Net
         private int desyncTick = -1;
 
         /// <summary>This machine's data manifest, built once at startup.</summary>
-        private List<Engine.DataManifest.Entry> manifest;
+        private List<Shared.DataManifest.Entry> manifest;
 
         /// <summary>What the peer reported, kept so a refusal can name the files.</summary>
-        private List<Engine.DataManifest.Entry> remoteManifest;
+        private List<Shared.DataManifest.Entry> remoteManifest;
 
         /// <summary>
         /// Hashes this installation's WAD, mods and actor tables. Called before the
@@ -87,12 +87,12 @@ namespace DPTDOOM2D.Net
         {
             if (manifest != null) return;
 
-            manifest = Engine.DataManifest.Build();
-            Log.Info("data: " + Engine.DataManifest.Describe(manifest));
+            manifest = DataFiles.Build();
+            Log.Info("data: " + Shared.DataManifest.Describe(manifest));
 
             // The tick checksum mixes this in, so a data change mid-session is
             // visible immediately rather than as a drift minutes later.
-            NetProtocol.ManifestDigest = Engine.DataManifest.Digest(manifest);
+            NetProtocol.ManifestDigest = Shared.DataManifest.Digest(manifest);
         }
 
         // ---- accessors -------------------------------------------------------
@@ -226,10 +226,10 @@ namespace DPTDOOM2D.Net
             // manifest follows the fixed 34-byte part of Hello.
             if (payload.Length > 34)
             {
-                remoteManifest = Engine.DataManifest.Decode(payload, 34);
+                remoteManifest = Shared.DataManifest.Decode(payload, 34);
 
                 PrepareManifest();
-                string difference = Engine.DataManifest.Compare(manifest, remoteManifest);
+                string difference = Shared.DataManifest.Compare(manifest, remoteManifest);
 
                 if (difference.Length != 0)
                 {
@@ -253,7 +253,7 @@ namespace DPTDOOM2D.Net
 
             // The host sends its own manifest back, so the guest can also say what
             // differed instead of only "refused".
-            byte[] hostManifest = Engine.DataManifest.Encode(manifest);
+            byte[] hostManifest = Shared.DataManifest.Encode(manifest);
             var welcome = new byte[10 + 8 + hostManifest.Length];
             NetProtocol.PutU16(welcome, 0, NetProtocol.Version);
             welcome[2] = (byte)remotePlayer;
@@ -311,7 +311,7 @@ namespace DPTDOOM2D.Net
             lastReceiveMs = Environment.TickCount;
 
             PrepareManifest();
-            byte[] manifestPayload = Engine.DataManifest.Encode(manifest);
+            byte[] manifestPayload = Shared.DataManifest.Encode(manifest);
 
             var hello = new byte[2 + 32 + manifestPayload.Length];
             NetProtocol.PutU16(hello, 0, NetProtocol.Version);
@@ -372,10 +372,10 @@ namespace DPTDOOM2D.Net
             // truncated by the frame size.
             if (payload.Length > 18)
             {
-                remoteManifest = Engine.DataManifest.Decode(payload, 18);
+                remoteManifest = Shared.DataManifest.Decode(payload, 18);
 
                 PrepareManifest();
-                string difference = Engine.DataManifest.Compare(manifest, remoteManifest);
+                string difference = Shared.DataManifest.Compare(manifest, remoteManifest);
                 if (difference.Length != 0)
                 {
                     failure = "different game data: " + difference;
