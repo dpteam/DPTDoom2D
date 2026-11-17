@@ -88,7 +88,7 @@ namespace DPTDOOM2D.Audio
 
             var module = new XmModule();
 
-            module.Name = Latin1(data, 17, 20).TrimEnd('\0', ' ');
+            module.Name = DecodeName(data, 17, 20);
 
             int version = BitConverter.ToUInt16(data, 58);
             int headerSize = BitConverter.ToInt32(data, 60);
@@ -350,6 +350,31 @@ namespace DPTDOOM2D.Audio
         private static string Latin1(byte[] data, int at, int count)
         {
             return System.Text.Encoding.GetEncoding(28591).GetString(data, at, count);
+        }
+
+        /// <summary>
+        /// Decodes a tracker text field.
+        ///
+        /// The names in Doom2D's modules are CP1251 ("Конец"), written by a
+        /// Russian tracker; reading them as Latin-1 turned every Cyrillic byte
+        /// into a separate mojibake character, which is what the overlay used to
+        /// show. CP1251 is a superset of ASCII for 0..127, so Latin names are
+        /// unaffected.
+        /// </summary>
+        private static string DecodeName(byte[] data, int at, int count)
+        {
+            string text;
+
+            try
+            {
+                text = System.Text.Encoding.GetEncoding(1251).GetString(data, at, count);
+            }
+            catch
+            {
+                text = Latin1(data, at, count);
+            }
+
+            return text.TrimEnd('\0', ' ');
         }
     }
 }

@@ -285,6 +285,7 @@ namespace DPTDOOM2D.Win32
         // ---- gdi32 -----------------------------------------------------------
 
         [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int width, int height);
         [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr dc);
 
         [DllImport("gdi32.dll")]

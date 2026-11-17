@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using DPTDOOM2D.Engine;
 
 namespace DPTDOOM2D.Win32
 {
@@ -337,62 +338,78 @@ namespace DPTDOOM2D.Win32
 
             NativeMethods.CopyMemory(surfaceBits, pixels, (IntPtr)(pixelWidth * pixelHeight * 4));
 
+            EnsureBackBuffer();
+            if (backDc == IntPtr.Zero) return;
+
+            // Everything goes into the back buffer and reaches the window in one
+            // BitBlt. Painting the frame and then the overlay straight onto the
+            // window showed the frame alone for the moment between the two calls,
+            // and a WM_PAINT arriving in that window repainted it without the
+            // overlay: that is the flicker.
+            int dstW, dstH, offX = 0, offY = 0;
+            int mode = NativeMethods.COLORONCOLOR;
+
+            if (Stretch == StretchMode.PixelPerfect)
+            {
+                // Integer factor only: pixels stay square, the remainder is
+                // letterboxed. This is the "as the original looked" mode.
+                int factor = Scale;
+                if (factor <= 0)
+                {
+                    int byWidth = clientWidth / pixelWidth;
+                    int byHeight = clientHeight / pixelHeight;
+                    factor = Math.Min(byWidth, byHeight);
+                }
+                if (factor < 1) factor = 1;
+
+                dstW = pixelWidth * factor;
+                dstH = pixelHeight * factor;
+                offX = (clientWidth - dstW) / 2;
+                offY = (clientHeight - dstH) / 2;
+            }
+            else
+            {
+                // Fill the client area. Nearest keeps the pixels crisp and
+                // square-ish; smooth is the bilinear one for people who prefer
+                // the softer look on a high-DPI display.
+                dstW = clientWidth;
+                dstH = clientHeight;
+                if (Stretch == StretchMode.Smooth) mode = NativeMethods.HALFTONE;
+            }
+
+            if (dstW == pixelWidth && dstH == pixelHeight && offX == 0 && offY == 0)
+            {
+                NativeMethods.BitBlt(backDc, 0, 0, pixelWidth, pixelHeight, memoryDc, 0, 0, NativeMethods.SRCCOPY);
+            }
+            else
+            {
+                NativeMethods.SetStretchBltMode(backDc, mode);
+                NativeMethods.StretchBlt(backDc, offX, offY, dstW, dstH, memoryDc, 0, 0, pixelWidth, pixelHeight,
+                    NativeMethods.SRCCOPY);
+            }
+
+            // Letterbox bars: without this the window shows whatever the desktop
+            // had there before, which looks like a rendering bug.
+            if (offX > 0 || offY > 0 || dstW < clientWidth || dstH < clientHeight)
+            {
+                FillRect(backDc, 0, 0, clientWidth, offY, 0, 0, 0, 0);
+                FillRect(backDc, 0, offY + dstH, clientWidth, clientHeight - offY - dstH, 0, 0, 0, 0);
+                FillRect(backDc, 0, offY, offX, dstH, 0, 0, 0, 0);
+                FillRect(backDc, offX + dstW, offY, clientWidth - offX - dstW, dstH, 0, 0, 0, 0);
+            }
+
+            if (OverlayPainter != null)
+            {
+                try { OverlayPainter(backDc, clientWidth, clientHeight); }
+                catch (Exception e) { Log.Error("overlay: draw failed", e); }
+            }
+
             IntPtr dc = NativeMethods.GetDC(hWnd);
             if (dc == IntPtr.Zero) return;
 
             try
             {
-                int dstW, dstH, offX = 0, offY = 0;
-                int mode = NativeMethods.COLORONCOLOR;
-
-                if (Stretch == StretchMode.PixelPerfect)
-                {
-                    // Integer factor only: pixels stay square, the remainder is
-                    // letterboxed. This is the "as the original looked" mode.
-                    int factor = Scale;
-                    if (factor <= 0)
-                    {
-                        int byWidth = clientWidth / pixelWidth;
-                        int byHeight = clientHeight / pixelHeight;
-                        factor = Math.Min(byWidth, byHeight);
-                    }
-                    if (factor < 1) factor = 1;
-
-                    dstW = pixelWidth * factor;
-                    dstH = pixelHeight * factor;
-                    offX = (clientWidth - dstW) / 2;
-                    offY = (clientHeight - dstH) / 2;
-                }
-                else
-                {
-                    // Fill the client area. Nearest keeps the pixels crisp and
-                    // square-ish; smooth is the bilinear one for people who
-                    // prefer the softer look on a high-DPI display.
-                    dstW = clientWidth;
-                    dstH = clientHeight;
-                    if (Stretch == StretchMode.Smooth) mode = NativeMethods.HALFTONE;
-                }
-
-                if (dstW == pixelWidth && dstH == pixelHeight && offX == 0 && offY == 0)
-                {
-                    NativeMethods.BitBlt(dc, 0, 0, pixelWidth, pixelHeight, memoryDc, 0, 0, NativeMethods.SRCCOPY);
-                }
-                else
-                {
-                    NativeMethods.SetStretchBltMode(dc, mode);
-                    NativeMethods.StretchBlt(dc, offX, offY, dstW, dstH, memoryDc, 0, 0, pixelWidth, pixelHeight,
-                        NativeMethods.SRCCOPY);
-                }
-
-                // Letterbox bars: without this the window shows whatever the
-                // desktop had there before, which looks like a rendering bug.
-                if (offX > 0 || offY > 0 || dstW < clientWidth || dstH < clientHeight)
-                {
-                    FillRect(dc, 0, 0, clientWidth, offY, 0, 0, 0, 0);
-                    FillRect(dc, 0, offY + dstH, clientWidth, clientHeight - offY - dstH, 0, 0, 0, 0);
-                    FillRect(dc, 0, offY, offX, dstH, 0, 0, 0, 0);
-                    FillRect(dc, offX + dstW, offY, clientWidth - offX - dstW, dstH, 0, 0, 0, 0);
-                }
+                NativeMethods.BitBlt(dc, 0, 0, clientWidth, clientHeight, backDc, 0, 0, NativeMethods.SRCCOPY);
             }
             finally
             {
@@ -400,16 +417,71 @@ namespace DPTDOOM2D.Win32
             }
 
             NativeMethods.ValidateRect(hWnd, IntPtr.Zero);
+        }
 
-            if (OverlayPainter != null)
+        // ---- back buffer -----------------------------------------------------
+
+        private IntPtr backDc;
+        private IntPtr backBitmap;
+        private IntPtr backPrevious;
+        private int backWidth;
+        private int backHeight;
+
+        /// <summary>Client-sized offscreen surface, so a frame reaches the window whole.</summary>
+        private void EnsureBackBuffer()
+        {
+            if (backDc != IntPtr.Zero && backWidth == clientWidth && backHeight == clientHeight) return;
+
+            ReleaseBackBuffer();
+
+            IntPtr screenDc = NativeMethods.GetDC(hWnd);
+            if (screenDc == IntPtr.Zero) return;
+
+            try
             {
-                IntPtr overlayDc = NativeMethods.GetDC(hWnd);
-                if (overlayDc != IntPtr.Zero)
+                backDc = NativeMethods.CreateCompatibleDC(screenDc);
+                if (backDc == IntPtr.Zero) return;
+
+                backBitmap = NativeMethods.CreateCompatibleBitmap(screenDc, clientWidth, clientHeight);
+                if (backBitmap == IntPtr.Zero)
                 {
-                    try { OverlayPainter(overlayDc, clientWidth, clientHeight); }
-                    finally { NativeMethods.ReleaseDC(hWnd, overlayDc); }
+                    NativeMethods.DeleteDC(backDc);
+                    backDc = IntPtr.Zero;
+                    return;
                 }
+
+                backPrevious = NativeMethods.SelectObject(backDc, backBitmap);
+                backWidth = clientWidth;
+                backHeight = clientHeight;
             }
+            finally
+            {
+                NativeMethods.ReleaseDC(hWnd, screenDc);
+            }
+        }
+
+        private void ReleaseBackBuffer()
+        {
+            if (backDc != IntPtr.Zero)
+            {
+                if (backPrevious != IntPtr.Zero)
+                {
+                    NativeMethods.SelectObject(backDc, backPrevious);
+                    backPrevious = IntPtr.Zero;
+                }
+
+                NativeMethods.DeleteDC(backDc);
+                backDc = IntPtr.Zero;
+            }
+
+            if (backBitmap != IntPtr.Zero)
+            {
+                NativeMethods.DeleteObject(backBitmap);
+                backBitmap = IntPtr.Zero;
+            }
+
+            backWidth = 0;
+            backHeight = 0;
         }
 
         /// <summary>Paints text with GDI: used by the overlay, never into the framebuffer.</summary>
@@ -602,6 +674,7 @@ namespace DPTDOOM2D.Win32
             disposed = true;
 
             ReleaseSurface();
+            ReleaseBackBuffer();
 
             foreach (IntPtr font in fonts.Values) NativeMethods.DeleteObject(font);
             fonts.Clear();

@@ -367,9 +367,8 @@ namespace DPTDOOM2D.Ui
             lines.Add("weapon         " + DGame.Pl1.Wpn + "  ammo " + DGame.Pl1.Ammo);
             lines.Add("monsters       " + Monsters.Count);
             lines.Add("items          " + Items.Count);
-            lines.Add("music          " + (Music.IsPlaying ? Music.Describe(Music.Current) : "off"));
-            lines.Add("track          " + (Music.TrackName.Length > 0 ? Music.TrackName : "-")
-                + " (" + Music.Source + ")");
+            lines.Add("track          " + (Music.IsPlaying ? Music.TrackName : "off")
+                + "  [" + Music.Source + "]");
             lines.Add("scale          " + (Scale == 0 ? "fit" : Scale + "x")
                 + "  " + Config.StretchName(Stretch));
             if (Net.NetInput.Active) lines.Add("net            " + Net.NetInput.Status());

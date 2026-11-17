@@ -340,16 +340,24 @@ namespace DPTDOOM2D.Engine
             return string.IsNullOrEmpty(name) ? "MENU" : name;
         }
 
-        /// <summary>Printable form of a track name, for logs and the overlay.</summary>
+        /// <summary>
+        /// Printable form of a track name, for logs and the overlay.
+        ///
+        /// Track names come from the WAD as CP1251 ("Конец"), so they are
+        /// transliterated the same way the file names are: the overlay then shows
+        /// "KONEC" instead of a row of question marks.
+        /// </summary>
         public static string Describe(string name)
         {
             if (string.IsNullOrEmpty(name)) return "?";
 
-            var text = new StringBuilder(name.Length);
+            bool ascii = true;
             for (int i = 0; i < name.Length; ++i)
-                text.Append(name[i] < 0x20 || name[i] > 0x7E ? '?' : name[i]);
+                if (name[i] < 0x20 || name[i] > 0x7E) { ascii = false; break; }
 
-            return text.ToString();
+            if (ascii) return name;
+
+            return Transliterate(name);
         }
 
         public static string TrackPath(string name)
