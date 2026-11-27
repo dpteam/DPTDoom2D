@@ -570,15 +570,23 @@ namespace DPTDOOM2D.Engine
         private static byte[] ConvertTrack(DoomWad source, DoomWad reference,
             List<int> musicLumps, ref int musicAt, Report report)
         {
-            List<string> tracks = MusTracks(source);
+            List<string> tracks = MusicTracks(source);
 
             if (tracks.Count == 0) return null;
 
             string track = tracks[musicAt % tracks.Count];
             ++musicAt;
 
-            byte[] mus = source.Read(track);
-            List<MidiNote> notes = MusFile.Read(mus, false);
+            byte[] raw = source.Read(track);
+            if (raw == null) return null;
+
+            // Doom ships MUS, FreeDoom ships MIDI. Both readers produce the same
+            // MidiNote list, so only this line has to know which is which — and
+            // assuming MUS is what made the first FreeDoom build come out with
+            // "tracks 0 new" and Prikol's soundtrack in a set that claims to be free.
+            List<MidiNote> notes = LooksLikeMidi(raw)
+                ? MidiFile.Read(raw)
+                : MusFile.Read(raw, false);
 
             // DMM holds at most 64 patterns of 512 ticks, which is a little over eight
             // minutes. A longer song is cut at the limit rather than refused: the part
@@ -654,7 +662,15 @@ namespace DPTDOOM2D.Engine
             return map;
         }
 
-        private static List<string> MusTracks(DoomWad source)
+        /// <summary>
+        /// The lumps that hold music, in either format a Doom data set uses.
+        ///
+        /// Doom and Doom II ship MUS; FreeDoom ships standard MIDI. Both are handled,
+        /// because a converter that only knows one of them silently produces a data set
+        /// with no soundtrack of its own — and then falls back to the reference's music,
+        /// which is exactly what a "free" set must not do.
+        /// </summary>
+        private static List<string> MusicTracks(DoomWad source)
         {
             var tracks = new List<string>();
 
@@ -665,11 +681,20 @@ namespace DPTDOOM2D.Engine
                 byte[] head = source.Read(i);
                 if (head == null || head.Length < 4) continue;
 
-                if (head[0] == 'M' && head[1] == 'U' && head[2] == 'S' && head[3] == 0x1A)
-                    tracks.Add(source.NameOf(i));
+                bool mus = head[0] == 'M' && head[1] == 'U' && head[2] == 'S' && head[3] == 0x1A;
+                if (mus) { tracks.Add(source.NameOf(i)); continue; }
+
+                if (LooksLikeMidi(head)) tracks.Add(source.NameOf(i));
             }
 
             return tracks;
+        }
+
+        /// <summary>A standard MIDI file starts with the "MThd" chunk.</summary>
+        private static bool LooksLikeMidi(byte[] data)
+        {
+            return data != null && data.Length >= 14
+                && data[0] == 'M' && data[1] == 'T' && data[2] == 'h' && data[3] == 'd';
         }
     }
 }

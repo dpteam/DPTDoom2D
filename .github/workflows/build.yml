@@ -77,17 +77,20 @@ jobs:
           $exe = 'DPTDOOM2D/bin/Release/net40/dptdoom2d.exe'
           $data = 'DPTDOOM2D/dist/DPTDOOM2D/Data'
 
-          $freedoom = 'refs/freedoom/wads/freedoom1.wad'
-          if (-not (Test-Path $freedoom)) { $freedoom = 'refs/freedoom/freedoom1.wad' }
+          # The path tools/fetch-freedoom.ps1 writes to. A missing file means the
+          # fetch step failed quietly, and a release without the set is worse than
+          # one that says why.
+          $freedoom = 'refs/freedoom/freedoom1.wad'
 
           if (Test-Path $freedoom) {
             & $exe --freedoom $freedoom "$data/freedoom2d.wad"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           else {
-            Write-Host 'freedoom2d.wad skipped: refs/freedoom has no WAD'
+            Write-Host '::warning::freedoom2d.wad skipped: refs/freedoom/freedoom1.wad is missing'
           }
 
+          # The generator needs no outside data, so this one has no excuse to fail.
           & $exe --genwad 1 "$data/aidoom2d.wad"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

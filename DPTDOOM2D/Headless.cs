@@ -1298,7 +1298,37 @@ namespace DPTDOOM2D
 
             try
             {
-                if (FreeDoomBuild(doomPath, temporary) != 0) return 1;
+                string reference = Wad.MainWadName;
+
+                if (!File.Exists(doomPath))
+                {
+                    Console.Error.WriteLine("fdcheck: " + doomPath + " не найден");
+                    return 1;
+                }
+
+                if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                {
+                    Console.Error.WriteLine("fdcheck: не найден набор Doom2D для размеров и карт");
+                    return 1;
+                }
+
+                Engine.FreeDoom.Report report = Engine.FreeDoom.Convert(doomPath, reference, temporary);
+
+                Console.WriteLine("fdcheck: " + Path.GetFileName(doomPath) + " -> "
+                    + Path.GetFileName(temporary));
+                Console.WriteLine("  " + report.Summary());
+
+                // A set that converted no music at all is not a free set: it would be
+                // carrying the reference's soundtrack. That is exactly what happened
+                // while the converter only knew MUS and FreeDoom ships MIDI, and it was
+                // invisible in the lump count because the reference tracks were copied
+                // through. Fail loudly instead.
+                if (report.TracksConverted == 0)
+                {
+                    Console.Error.WriteLine("fdcheck: ни один трек не сконвертирован — "
+                        + "в наборе останется чужая музыка");
+                    return 1;
+                }
 
                 long size = new FileInfo(temporary).Length;
 

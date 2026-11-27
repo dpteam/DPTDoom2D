@@ -202,6 +202,20 @@ try
 			Write-Host '  freedoom converter skipped (no refs/D2D_Also/DOOM/DOOM2.WAD)' -ForegroundColor DarkGray
 		}
 
+		# And again on the real FreeDoom, because it is not the same input: Doom ships
+		# MUS music, FreeDoom ships MIDI. A converter that knows only one of them
+		# passes on DOOM2.WAD and produces a set with somebody else's soundtrack on
+		# FreeDoom — which is precisely what happened once.
+		$free = Join-Path (Split-Path -Parent $root) 'refs\freedoom\freedoom1.wad'
+		if (Test-Path $free) {
+			& $exe --fdcheck $free 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host '  freedoom on MIDI music FAILED' -ForegroundColor Red; $failed++ }
+			else { Write-Host '  freedoom on MIDI music ok' -ForegroundColor DarkGray }
+		}
+		else {
+			Write-Host '  freedoom on MIDI music skipped (run tools/fetch-freedoom.ps1)' -ForegroundColor DarkGray
+		}
+
 		# AIDooM2D: a data set drawn entirely by code. The check builds it and boots
 		# the game on it, which is the only way to know the generator still covers
 		# every resource the engine asks for.
