@@ -11,7 +11,7 @@
     <Product>DPT.DOOM 2D</Product>
     <Company>DartPower Team</Company>
     <Copyright>Copyright (C) DartPower Team.</Copyright>
-    <Version>1.0.0</Version>
+    <Version>2.2.0</Version>
     <InvariantGlobalization Condition="'$(TargetFramework)' == 'net9.0'">true</InvariantGlobalization>
   </PropertyGroup>
 

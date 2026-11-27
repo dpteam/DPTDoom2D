@@ -24,7 +24,7 @@ namespace DPTDOOM2D.Shared
         public const string Name = "DPT.DOOM 2D";
 
         /// <summary>The version, without a leading 'v'.</summary>
-        public const string Version = "1.0.0";
+        public const string Version = "2.2.0";
 
         /// <summary>Name and version together, for banners and About screens.</summary>
         public const string Title = Name + " v" + Version;
@@ -38,7 +38,7 @@ namespace DPTDOOM2D.Shared
         public const string OnDarkColor = "#FFFFFF";
 
         /// <summary>Where the project lives. Empty when a fork has no home to point at.</summary>
-        public const string HomeUrl = "https://github.com/DartPower/DPTDOOM2D";
+        public const string HomeUrl = "https://github.com/dpteam/DPTDoom2D";
 
         public const string LauncherName = Name + " Launcher";
         public const string MasterName = Name + " master";

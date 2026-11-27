@@ -20,7 +20,7 @@
     <Product>DPT.DOOM 2D</Product>
     <Company>DartPower Team</Company>
     <Copyright>Copyright (C) DartPower Team. Based on Doom 2D by Prikol Software.</Copyright>
-    <Version>1.0.0</Version>
+    <Version>2.2.0</Version>
     <NeutralLanguage>en</NeutralLanguage>
     <NoWarn>$(NoWarn);CS0162;CS0168;CS0169;CS0219;CS0414;CS0649;CS1591</NoWarn>
   </PropertyGroup>
