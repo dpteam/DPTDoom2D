@@ -34,6 +34,17 @@ namespace DPTDOOM2D.Game
             for (int i = 0; i < MaxDot; ++i) dot[i] = new Dot();
         }
 
+        /// <summary>How many bullet marks and sparks are alive, for the F2 stats tab.</summary>
+        public static int Count
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < MaxDot; ++i) if (dot[i].T != 0) ++n;
+                return n;
+            }
+        }
+
         public static void Save(BinWriter w)
         {
             int n = 0;

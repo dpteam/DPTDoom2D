@@ -68,6 +68,23 @@ namespace DPTDOOM2D.Audio
             return index >= 0 && index < MaxChannels ? channels[index] : null;
         }
 
+        /// <summary>
+        /// How many effect channels are playing, for the F2 stats tab.
+        ///
+        /// Worth watching while testing a sound: sixteen is the whole mixer, and a
+        /// scene that keeps every channel busy is one where a new gunshot cuts an
+        /// older sound instead of mixing with it.
+        /// </summary>
+        public int ActiveVoices
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < MaxChannels; ++i) if (channels[i].Active) ++n;
+                return n;
+            }
+        }
+
         public int FindFreeChannel()
         {
             for (int i = 0; i < MaxChannels; ++i) if (!channels[i].Active) return i;

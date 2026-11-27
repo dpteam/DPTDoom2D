@@ -49,6 +49,19 @@ namespace DPTDOOM2D.Audio
         private volatile bool running;
         private volatile bool disposed;
 
+        /// <summary>
+        /// Guards the buffer headers against the audio thread.
+        ///
+        /// <see cref="Reset"/> unprepares and re-prepares every header, and it runs on
+        /// the game thread — from <c>Sound.FreeChunks</c>, which every level load
+        /// calls. The audio thread is walking the same headers at that moment, so
+        /// without this it could decide a buffer is free, have it reset underneath,
+        /// and queue it a second time. The driver then plays the same forty-six
+        /// milliseconds twice: heard as the music briefly doubling or stuttering, and
+        /// only sometimes, because it depends on where the thread happened to be.
+        /// </summary>
+        private readonly object deviceLock = new object();
+
         /// <summary>Fills the destination with interleaved stereo samples.</summary>
         public Action<short[], int> Renderer;
 
@@ -158,35 +171,40 @@ namespace DPTDOOM2D.Audio
                 // The event is auto-reset and signalled once per completed buffer.
                 WaitForSingleObject(doneEvent, 100);
 
-                for (int i = 0; i < BufferCount && running; ++i)
+                lock (deviceLock)
                 {
-                    int flags = ReadFlags(i);
+                    if (!running) break;
 
-                    if ((flags & WHDR_INQUEUE) != 0) continue;
-                    if ((flags & WHDR_PREPARED) == 0) continue;
-
-                    short[] buffer = buffers[i];
-                    try
+                    for (int i = 0; i < BufferCount; ++i)
                     {
-                        if (Renderer != null) Renderer(buffer, BufferFrames);
-                        else Array.Clear(buffer, 0, buffer.Length);
-                    }
-                    catch (Exception e)
-                    {
-                        // A broken renderer must not kill the audio thread: silence
-                        // and a log line is recoverable, a dead thread is not.
-                        Array.Clear(buffer, 0, buffer.Length);
-                        Log.Error("audio: renderer failed", e);
-                    }
+                        int flags = ReadFlags(i);
 
-                    // Only the DONE bit is cleared. Rewriting the whole header here
-                    // wiped WHDR_PREPARED too, and waveOutWrite then failed with
-                    // WAVERR_UNPREPARED (34) on every buffer — the game had no
-                    // sound at all while looking perfectly healthy.
-                    Marshal.WriteInt32(HeaderPtr(i), 24, flags & ~WHDR_DONE);
+                        if ((flags & WHDR_INQUEUE) != 0) continue;
+                        if ((flags & WHDR_PREPARED) == 0) continue;
 
-                    int written = waveOutWrite(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
-                    if (written != 0) Log.Warn("audio: waveOutWrite(" + i + ") = " + written);
+                        short[] buffer = buffers[i];
+                        try
+                        {
+                            if (Renderer != null) Renderer(buffer, BufferFrames);
+                            else Array.Clear(buffer, 0, buffer.Length);
+                        }
+                        catch (Exception e)
+                        {
+                            // A broken renderer must not kill the audio thread: silence
+                            // and a log line is recoverable, a dead thread is not.
+                            Array.Clear(buffer, 0, buffer.Length);
+                            Log.Error("audio: renderer failed", e);
+                        }
+
+                        // Only the DONE bit is cleared. Rewriting the whole header here
+                        // wiped WHDR_PREPARED too, and waveOutWrite then failed with
+                        // WAVERR_UNPREPARED (34) on every buffer — the game had no
+                        // sound at all while looking perfectly healthy.
+                        Marshal.WriteInt32(HeaderPtr(i), 24, flags & ~WHDR_DONE);
+
+                        int written = waveOutWrite(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                        if (written != 0) Log.Warn("audio: waveOutWrite(" + i + ") = " + written);
+                    }
                 }
 
                 CompletedBuffers++;
@@ -198,22 +216,27 @@ namespace DPTDOOM2D.Audio
         {
             if (waveOut == IntPtr.Zero) return;
 
-            try
+            // Same lock the audio thread takes around the headers: resetting while it
+            // is mid-write is how the same buffer ends up queued twice.
+            lock (deviceLock)
             {
-                waveOutReset(waveOut);
-
-                // After a reset every header is unprepared, so they all have to be
-                // prepared again before they can be written to.
-                for (int i = 0; i < BufferCount; ++i)
+                try
                 {
-                    waveOutUnprepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
-                    WriteHeader(i, pins[i].AddrOfPinnedObject(), (uint)(buffers[i].Length * 2), 0);
-                    waveOutPrepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                    waveOutReset(waveOut);
+
+                    // After a reset every header is unprepared, so they all have to be
+                    // prepared again before they can be written to.
+                    for (int i = 0; i < BufferCount; ++i)
+                    {
+                        waveOutUnprepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                        WriteHeader(i, pins[i].AddrOfPinnedObject(), (uint)(buffers[i].Length * 2), 0);
+                        waveOutPrepareHeader(waveOut, HeaderPtr(i), WAVEHDR_SIZE);
+                    }
                 }
-            }
-            catch (Exception e)
-            {
-                Log.Warn("audio: reset failed: " + Log.Describe(e));
+                catch (Exception e)
+                {
+                    Log.Warn("audio: reset failed: " + Log.Describe(e));
+                }
             }
         }
 

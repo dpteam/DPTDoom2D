@@ -1155,6 +1155,372 @@ namespace DPTDOOM2D
         /// `Fatal` the moment a monster spawns, and a generator that has drifted out of
         /// step with the engine would otherwise only fail on a player's machine.
         /// </summary>
+        /// <summary>
+        /// --debugcheck: exercises the F2 Debug tab's actions without a window.
+        ///
+        /// The tab is a set of engine calls, and a debug tool that silently does nothing
+        /// is worse than no tool: it makes a developer think the thing they are testing
+        /// is fine. So each action is run and its effect measured — a spawn must raise
+        /// the monster count, the refill must set the health, a warp must change the
+        /// map — and any action that does not move its number fails the check.
+        /// </summary>
+        public static int DebugCheck()
+        {
+            var failed = new List<string>();
+
+            Glob.Reset(Seed);
+            Vga.Init(320, 200);
+            Vga.SetRect(0, 320, 0, 200);
+
+            DGame.TwoPl = false;
+            DGame.Dm = false;
+            DGame.State = DGame.GsGame;
+
+            DGame.Init();
+            World.LoadLightningSounds();
+
+            DGame.Map = 1;
+            Player.Reset();
+            DGame.Start();
+
+            // Let the level settle so monsters exist before anything is removed.
+            for (int tick = 0; tick < 10; ++tick) { Kbd.UpdateScripted(tick); DGame.Act(); }
+
+            // ---- spawn a monster ---------------------------------------------
+            int before = Monsters.Count;
+            int spawned = Ui.DebugActions.SpawnMonster(0);      // an imp
+
+            if (spawned < 0) failed.Add("Spawn monster вернул -1");
+            else if (Monsters.Count != before + 1)
+                failed.Add("Spawn monster: было " + before + ", стало " + Monsters.Count);
+
+            // ---- spawn an item -----------------------------------------------
+            int itemsBefore = Items.Count;
+            bool placed = Ui.DebugActions.SpawnItem(0);         // a clip
+
+            if (!placed) failed.Add("Spawn item вернул false");
+            else if (Items.Count != itemsBefore + 1)
+                failed.Add("Spawn item: было " + itemsBefore + ", стало " + Items.Count);
+
+            // ---- kill all -----------------------------------------------------
+            int killed = Ui.DebugActions.KillAll();
+
+            if (killed <= 0) failed.Add("Kill all: ничего не убито");
+            else if (Monsters.Count != 0)
+                failed.Add("Kill all: осталось " + Monsters.Count + " монстров");
+
+            // ---- refill --------------------------------------------------------
+            PlayerData p = DGame.Pl1;
+            p.Life = 1; p.Armor = 0; p.Ammo = 0; p.Shel = 0; p.Rock = 0;
+            p.Cell = 0; p.Wpns = 0; p.Keys = 0;
+
+            Ui.DebugActions.Refill();
+
+            if (p.Life != 100) failed.Add("Refill: здоровье " + p.Life);
+            if (p.Armor != 100) failed.Add("Refill: броня " + p.Armor);
+            if (p.Ammo != 200) failed.Add("Refill: патроны " + p.Ammo);
+            if (p.Wpns != 0xFF) failed.Add("Refill: оружие " + p.Wpns);
+            if (p.Keys != 0x07) failed.Add("Refill: ключи " + p.Keys);
+
+            // ---- warp ----------------------------------------------------------
+            int wasMap = DGame.Map;
+            Ui.DebugActions.Warp(2);
+
+            if (DGame.Map != 2) failed.Add("Warp: карта " + DGame.Map + ", ожидалась 2");
+            if (DGame.Map == wasMap) failed.Add("Warp: карта не сменилась");
+            if (DGame.State != DGame.GsGame) failed.Add("Warp: состояние " + DGame.State);
+
+            // A warp past the end must clamp, not crash.
+            Ui.DebugActions.Warp(9999);
+
+            if (DGame.Map != Ui.DebugActions.MapCount())
+                failed.Add("Warp: 9999 дала карту " + DGame.Map);
+
+            // ---- exit ----------------------------------------------------------
+            DGame.Exit = 0;
+            Ui.DebugActions.ExitLevel();
+
+            if (DGame.Exit != 1) failed.Add("Exit не выставился");
+
+            if (failed.Count > 0)
+            {
+                for (int i = 0; i < failed.Count; ++i)
+                    Console.Error.WriteLine("debugcheck: " + failed[i]);
+
+                return 1;
+            }
+
+            Console.WriteLine("debugcheck ok: spawn monster, spawn item, kill all, refill, warp, exit");
+            return 0;
+        }
+
+        /// <summary>
+        /// --setcheck: does the windowed game boot on the data set that was chosen?
+        ///
+        /// This exists because the answer used to be no. The launcher wrote
+        /// <c>-data freedoom2d</c>, the game parsed it, logged it, and then loaded
+        /// <c>doom2d.wad</c> from a hardcoded path. The old check drove the headless
+        /// boot, which honoured the option, so it stayed green while every player who
+        /// picked a different set got the original one anyway.
+        ///
+        /// The check therefore asks <see cref="GameHost.ResolveWadPath"/> — the same
+        /// method the window calls — instead of resolving the name itself. Testing a
+        /// copy of the logic is how the bug survived in the first place.
+        /// </summary>
+        public static int SetCheck()
+        {
+            var failed = new List<string>();
+
+            string saved = Config.MainWad;
+
+            try
+            {
+                // Nothing chosen: the original set, because a config from before this
+                // option existed has no main_wad line.
+                Config.MainWad = "";
+                string fallback = GameHost.ResolveWadPath();
+
+                if (!string.Equals(Path.GetFileName(fallback), "doom2d.wad",
+                    StringComparison.OrdinalIgnoreCase))
+                    failed.Add("без выбора ожидался doom2d.wad, получен " + fallback);
+
+                // Every installed set, by the spellings the launcher and the config
+                // can produce: bare name, with .wad, and upper case.
+                List<string> installed = DataFiles.InstalledSets(Program.DataDirectory);
+
+                if (installed.Count == 0) failed.Add("в Data нет ни одного набора");
+
+                for (int i = 0; i < installed.Count; ++i)
+                {
+                    string file = installed[i];
+                    string bare = Path.GetFileNameWithoutExtension(file);
+
+                    string[] spellings = { file, bare, file.ToUpperInvariant() };
+
+                    for (int k = 0; k < spellings.Length; ++k)
+                    {
+                        Config.MainWad = spellings[k];
+                        string resolved = GameHost.ResolveWadPath();
+
+                        if (!File.Exists(resolved))
+                        {
+                            failed.Add(spellings[k] + " -> " + resolved + " (нет файла)");
+                            continue;
+                        }
+
+                        if (!string.Equals(Path.GetFileName(resolved), file,
+                            StringComparison.OrdinalIgnoreCase))
+                            failed.Add(spellings[k] + " -> " + Path.GetFileName(resolved)
+                                + ", ожидался " + file);
+                    }
+                }
+
+                if (failed.Count > 0)
+                {
+                    for (int i = 0; i < failed.Count; ++i)
+                        Console.Error.WriteLine("setcheck: " + failed[i]);
+
+                    return 1;
+                }
+
+                Console.WriteLine("setcheck ok: " + string.Join(", ",
+                    installed.ToArray()) + ", по умолчанию doom2d.wad");
+                return 0;
+            }
+            finally
+            {
+                Config.MainWad = saved;
+            }
+        }
+
+        /// <summary>
+        /// --dmmcheck: the DMM reader against the format as it is documented.
+        ///
+        /// The interesting part of DMM is the sequence at the end of the file. It is a
+        /// small program, not a playlist: 255 is a jump and the byte after it is the
+        /// offset from the start of the sequence to jump to. Reading 255 as "the end"
+        /// and then carrying on with the next byte played that offset as if it were a
+        /// block number — so a sequence of "0 1 255 0" became "0 1 0" and the first
+        /// block was heard twice before the loop. That is what doubled music sounds
+        /// like, and it was invisible to every existing check because the audio was
+        /// still there, just wrong.
+        ///
+        /// This walks the sequence itself, the way the format description does, and
+        /// compares the answer with what the loader produced.
+        /// </summary>
+        public static int DmmCheck()
+        {
+            var failed = new List<string>();
+            int songs = 0;
+
+            for (int id = 0; id < Wad.ResCount; ++id)
+            {
+                if (Wad.GetResLen(id) < 12) continue;
+
+                byte[] data = Wad.LoadRes(id);
+                if (!DmmModule.LooksLikeDmm(data)) continue;
+
+                string name = Wad.GetResName(id);
+                ++songs;
+
+                int expectedLength, expectedRestart;
+
+                if (!WalkSequence(data, out expectedLength, out expectedRestart))
+                {
+                    failed.Add(name + ": заголовок не читается");
+                    continue;
+                }
+
+                XmModule module = DmmModule.Load(data, null);
+
+                if (module == null)
+                {
+                    failed.Add(name + ": не загрузился");
+                    continue;
+                }
+
+                if (module.Length != expectedLength)
+                    failed.Add(name + ": в порядке " + module.Length
+                        + " блоков, по последовательности " + expectedLength);
+
+                if (module.RestartPosition != expectedRestart)
+                    failed.Add(name + ": возврат на " + module.RestartPosition
+                        + ", по последовательности " + expectedRestart);
+
+                // A jump target that lands outside the list is a silent skip of the
+                // whole loop point: the track would play once and then stop.
+                if (module.Length > 0 && module.RestartPosition >= module.Length)
+                    failed.Add(name + ": возврат за пределы порядка");
+            }
+
+            if (songs == 0)
+            {
+                Console.Error.WriteLine("dmmcheck: в наборе нет ни одной DMM-композиции");
+                return 1;
+            }
+
+            if (failed.Count > 0)
+            {
+                for (int i = 0; i < failed.Count; ++i)
+                    Console.Error.WriteLine("dmmcheck: " + failed[i]);
+
+                return 1;
+            }
+
+            Console.WriteLine("dmmcheck ok: " + songs + " композиций, последовательности сходятся");
+            return 0;
+        }
+
+        /// <summary>
+        /// Reads a DMM sequence the way the format description does, without going
+        /// through the loader: how many XM patterns the order list must hold, and where
+        /// the loop point must be.
+        ///
+        /// Deliberately a second implementation. Asking the loader to check itself
+        /// would only prove that the loader agrees with the loader.
+        /// </summary>
+        private static bool WalkSequence(byte[] data, out int length, out int restart)
+        {
+            length = 0;
+            restart = 0;
+
+            int at = 4;
+            int version = data[at++];
+            int patternCount = data[at++];
+            int noteCount = BitConverter.ToUInt16(data, at); at += 2;
+
+            if (version != 0 || patternCount <= 0) return false;
+            if (at + noteCount * 4 > data.Length) return false;
+
+            int notes = at;
+            at += noteCount * 4;
+
+            // ---- order list ---------------------------------------------------
+            var sequence = new List<int>();
+
+            if (at < data.Length)
+            {
+                int count = data[at++];
+                for (int i = 0; i < count && at < data.Length; ++i) sequence.Add(data[at++]);
+            }
+
+            // ---- block lengths ------------------------------------------------
+            // Eight channels per block, each a run of notes ending with volume 0x80.
+            // A block's length is its longest channel, in ticks.
+            var blockLength = new int[patternCount];
+
+            int cursor = notes;
+            int end = notes + noteCount * 4;
+
+            for (int p = 0; p < patternCount && cursor < end; ++p)
+            {
+                int longest = 0;
+
+                for (int channel = 0; channel < 8 && cursor < end; ++channel)
+                {
+                    int row = 0;
+
+                    while (cursor < end)
+                    {
+                        int n = data[cursor];
+                        int instrument = data[cursor + 1];
+                        int volume = data[cursor + 2];
+                        int delay = data[cursor + 3];
+                        cursor += 4;
+
+                        if (volume == 0x80) break;               // end of this channel
+
+                        if (n == 0xFE) row += ((instrument << 8) | delay) == 0 ? 256
+                            : ((instrument << 8) | delay);
+                        else row += delay == 0 ? 256 : delay;
+                    }
+
+                    if (row > longest) longest = row;
+                }
+
+                blockLength[p] = longest < 1 ? 1 : longest;
+            }
+
+            // ---- walk it ------------------------------------------------------
+            const int RowsPerPattern = 256;
+
+            var atSequence = new int[sequence.Count + 1];
+            for (int i = 0; i < atSequence.Length; ++i) atSequence[i] = -1;
+
+            bool looped = false;
+
+            for (int i = 0; i < sequence.Count; ++i)
+            {
+                int value = sequence[i];
+
+                if (value == 255)
+                {
+                    int target = i + 1 < sequence.Count ? sequence[i + 1] : 0;
+
+                    restart = target < atSequence.Length && atSequence[target] >= 0
+                        ? atSequence[target]
+                        : 0;
+
+                    looped = true;
+                    break;
+                }
+
+                if (value >= patternCount) continue;
+                if (length >= 256) break;
+
+                atSequence[i] = length;
+
+                int sub = (blockLength[value] + RowsPerPattern - 1) / RowsPerPattern;
+                if (sub < 1) sub = 1;
+
+                for (int k = 0; k < sub && length < 256; ++k) ++length;
+            }
+
+            if (!looped) restart = 0;
+
+            return length > 0;
+        }
+
         public static int AiDoomCheck(uint seed)
         {
             string temporary = Path.Combine(Path.GetTempPath(), "aidoom2d-check.wad");
@@ -1693,6 +2059,66 @@ namespace DPTDOOM2D
                 sum / (frames * AudioOut.Channels), peak));
 
             return peak > 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// --musicdump &lt;track&gt; &lt;out.raw&gt;: renders a few seconds of a track to
+        /// raw 16-bit stereo PCM.
+        ///
+        /// Exists because "the music sounds doubled" is not something a peak check can
+        /// answer. With the samples on disk, an echo can be measured: a second copy is
+        /// the signal repeating itself at a fixed delay, and that shows up in an
+        /// autocorrelation as a peak where a clean track has none.
+        /// </summary>
+        public static int MusicDump(string track, string path, int seconds)
+        {
+            Vga.Init(320, 200);
+            Glob.Reset(Seed);
+
+            Music.Init();
+            Music.Load(track);
+
+            if (!Music.IsPlaying)
+            {
+                Console.Error.WriteLine("musicdump: " + Music.Describe(track) + " не загрузился");
+                return 1;
+            }
+
+            int blocks = seconds * AudioOut.SampleRate / 512;
+            var buffer = new float[AudioOut.Channels * 512];
+            var pcm = new short[blocks * 512 * AudioOut.Channels];
+
+            int at = 0;
+            int peakVoices = 0;
+
+            for (int block = 0; block < blocks; ++block)
+            {
+                Array.Clear(buffer, 0, buffer.Length);
+                Music.RenderForTest(buffer, 512);
+
+                if (Music.ActiveVoices > peakVoices) peakVoices = Music.ActiveVoices;
+
+                for (int i = 0; i < buffer.Length; ++i)
+                {
+                    float value = buffer[i];
+                    if (value > 1f) value = 1f;
+                    else if (value < -1f) value = -1f;
+
+                    pcm[at++] = (short)(value * 32767f);
+                }
+            }
+
+            var bytes = new byte[pcm.Length * 2];
+            Buffer.BlockCopy(pcm, 0, bytes, 0, bytes.Length);
+            File.WriteAllBytes(path, bytes);
+
+            Console.WriteLine("musicdump " + Music.Describe(track) + ": " + seconds
+                + " s, " + bytes.Length + " bytes, " + AudioOut.SampleRate + " Hz, "
+                + AudioOut.Channels + " ch, source " + Music.Source);
+            Console.WriteLine("  voices: peak " + peakVoices + " of "
+                + Music.ChannelCount + " channels");
+
+            return 0;
         }
 
         /// <summary>Keys are scripted as "tick:key,tick:key" so a run is reproducible.</summary>

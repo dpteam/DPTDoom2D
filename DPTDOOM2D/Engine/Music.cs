@@ -374,6 +374,24 @@ namespace DPTDOOM2D.Engine
             get { lock (sync) { return player != null && !player.Finished; } }
         }
 
+        /// <summary>
+        /// Voices sounding right now, and how many the module has.
+        ///
+        /// A tracker voice is one note. If the count exceeds the channel count the
+        /// same module is being played twice into one buffer, which is exactly what
+        /// "the music sounds doubled" means.
+        /// </summary>
+        public static int ActiveVoices
+        {
+            get { lock (sync) { return player == null ? 0 : player.ActiveVoices; } }
+        }
+
+        /// <summary>Channels in the loaded module.</summary>
+        public static int ChannelCount
+        {
+            get { lock (sync) { return module == null ? 0 : module.ChannelCount; } }
+        }
+
         public static string TrackName
         {
             get { lock (sync) { return module != null ? module.Name : ""; } }

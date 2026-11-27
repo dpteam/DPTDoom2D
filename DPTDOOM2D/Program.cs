@@ -135,6 +135,20 @@ namespace DPTDOOM2D
                     Boot();
                     return Headless.AiDoomCheck(checkSeed);
                 }
+                if (args[i] == "--debugcheck")
+                {
+                    Boot();
+                    return Headless.DebugCheck();
+                }
+                if (args[i] == "--setcheck")
+                {
+                    return Headless.SetCheck();
+                }
+                if (args[i] == "--dmmcheck")
+                {
+                    Boot();
+                    return Headless.DmmCheck();
+                }
                 if (args[i] == "--freedoom" && i + 2 < args.Length)
                 {
                     Boot();
@@ -215,6 +229,13 @@ namespace DPTDOOM2D
                 {
                     Boot();
                     return Headless.MusicCheck(args[i + 1]);
+                }
+                if (args[i] == "--musicdump" && i + 2 < args.Length)
+                {
+                    int seconds = (i + 3 < args.Length) ? int.Parse(args[i + 3]) : 8;
+
+                    Boot();
+                    return Headless.MusicDump(args[i + 1], args[i + 2], seconds);
                 }
                 if (args[i] == "--shell" && i + 2 < args.Length)
                 {

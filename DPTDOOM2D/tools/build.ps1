@@ -238,12 +238,42 @@ try
 		}
 		Remove-Item $a, $b -ErrorAction SilentlyContinue
 
-		# -data picks the data set, and every name has to resolve to a file: a config
-		# that says freedoom2d must boot on it, not silently fall back to doom2d.
-		& $exe -data doom2d --simulate 10 $env:TEMP\setcheck.bmp 1 2>&1 | Out-Null
+		# The F2 Debug tab's actions. A debug tool that silently does nothing is worse
+		# than none, so each action is run and its effect measured.
+		& $exe --debugcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  debug actions FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  debug actions ok' -ForegroundColor DarkGray }
+
+		# The data set the launcher chose has to be the one the game boots on. The old
+		# check ran "--simulate -data doom2d", which is the default: it would have
+		# passed no matter what the loader did. --setcheck asks the same method the
+		# window calls, for every installed set and every spelling the config can
+		# contain.
+		& $exe --setcheck 2>&1 | Out-Null
 		if ($LASTEXITCODE -ne 0) { Write-Host '  data set selection FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  data set selection ok' -ForegroundColor DarkGray }
+
+		# And boot each set for real, not just resolve its name: a set that resolves
+		# but cannot load is a window that closes on the player.
+		foreach ($set in @('doom2d', 'freedoom2d', 'aidoom2d')) {
+			$wad = Join-Path (Join-Path (Split-Path -Parent $exe) 'Data') ($set + '.wad')
+			if (-not (Test-Path $wad)) {
+				Write-Host "  data set $set skipped (not built)" -ForegroundColor DarkGray
+				continue
+			}
+
+			& $exe -data $set --simulate 10 $env:TEMP\setcheck.bmp 1 2>&1 | Out-Null
+			if ($LASTEXITCODE -ne 0) { Write-Host "  data set $set FAILED to boot" -ForegroundColor Red; $failed++ }
+			else { Write-Host "  data set $set boots ok" -ForegroundColor DarkGray }
+		}
 		Remove-Item $env:TEMP\setcheck.bmp -ErrorAction SilentlyContinue
+
+		# The DMM sequence is a program: 255 jumps, and the byte after it is the
+		# offset. Reading it as "the end" replayed a block and was audible as doubled
+		# music. This walks the sequence independently and compares.
+		& $exe --dmmcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  dmm sequence FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  dmm sequence ok' -ForegroundColor DarkGray }
 
 		# Map writer: every map in the game and in the 166 custom packs has to survive
 		# a read-write-read round trip byte for byte. The editor cannot save a map

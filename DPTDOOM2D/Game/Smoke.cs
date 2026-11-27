@@ -33,12 +33,22 @@ namespace DPTDOOM2D.Game
             for (int i = 0; i < MaxSmok; ++i) sm[i] = new Sm();
         }
 
+        /// <summary>How many particles are alive, for the F2 stats tab.</summary>
+        public static int Count
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < MaxSmok; ++i) if (sm[i].T != 0) ++n;
+                return n;
+            }
+        }
+
         public static void Save(BinWriter w)
         {
             int n = 0;
             for (int i = 0; i < MaxSmok; ++i) if (sm[i].T != 0) ++n;
-            w.Int(n);
-            for (int i = 0; i < MaxSmok; ++i)
+            w.Int(n);            for (int i = 0; i < MaxSmok; ++i)
                 if (sm[i].T != 0)
                 {
                     w.Int(sm[i].X); w.Int(sm[i].Y); w.Int(sm[i].Xv); w.Int(sm[i].Yv);

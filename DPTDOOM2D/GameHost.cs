@@ -37,7 +37,16 @@ namespace DPTDOOM2D
             Vga.Init(Vga.SCRW, Vga.SCRH);
 
             Wad.Startup();
-            string wad = Path.Combine(Program.DataDirectory, "doom2d.wad");
+
+            string wad = ResolveWadPath();
+
+            if (!File.Exists(wad))
+            {
+                throw new Fatal("Не найден " + Path.GetFileName(wad) + " (искал в "
+                    + Program.DataDirectory + ")\n"
+                    + "Наборы данных: " + DataFiles.DescribeSets(Program.DataDirectory));
+            }
+
             Wad.AddWad(wad);
 
             // What the session has to agree on: the WAD, every -file in order, the
@@ -47,7 +56,8 @@ namespace DPTDOOM2D
             Program.AddExtraWads();
             Wad.InitWads();
 
-            Log.Info("data: " + Program.DataDirectory + ", " + Wad.Entries.Count + " resources");
+            Log.Info("data: " + Path.GetFileName(wad) + " (" + DataFiles.SetTitle(wad)
+                + "), " + Program.DataDirectory + ", " + Wad.Entries.Count + " resources");
 
             Palette.Load();
             Palette.SetGamma(Config.Gamma);
@@ -112,6 +122,22 @@ namespace DPTDOOM2D
             if (Net.NetInput.Active) overlay.AddLog("net: " + Net.NetInput.Status());
         }
 
+        /// <summary>
+        /// The WAD the window boots on.
+        ///
+        /// A method rather than a line inside the constructor, because this is the
+        /// question `--setcheck` has to be able to ask without opening a window. It
+        /// used to be the literal <c>doom2d.wad</c> here, which meant `-data
+        /// freedoom2d` was parsed, stored, logged and then ignored: the launcher
+        /// offered three data sets and every one of them started the original. The
+        /// headless boot honoured the option, so the check in build.ps1 passed while
+        /// the game itself did not — it was testing the other code path.
+        /// </summary>
+        internal static string ResolveWadPath()
+        {
+            return DataFiles.MainWadPath(Program.DataDirectory, Config.MainWad);
+        }
+
         public void Run()
         {
             long tick = Stopwatch.GetTimestamp();
@@ -119,6 +145,14 @@ namespace DPTDOOM2D
 
             while (running && !window.Closed)
             {
+                // What the stats tab graphs is the *work* per tick, not the frame
+                // period: the loop deliberately sleeps to hit twenty ticks a second,
+                // so the period is always 50 ms and a graph of it would be a flat line
+                // that never showed anything. The work time is what grows when a level
+                // gets heavy, and when it passes 50 ms the game drops frames.
+                long workStart = Stopwatch.GetTimestamp();
+                long logicStart = workStart;
+
                 window.PumpMessages();
                 if (window.Closed) break;
 
@@ -155,10 +189,18 @@ namespace DPTDOOM2D
                         Music.Update();
                     }
 
+                    long logicMs = (Stopwatch.GetTimestamp() - logicStart) * 1000
+                        / Stopwatch.Frequency;
+
                     Kbd.LastKey = 0;
 
                     DGame.Draw();
                     Present();
+
+                    long workMs = (Stopwatch.GetTimestamp() - workStart) * 1000
+                        / Stopwatch.Frequency;
+
+                    overlay.Sample(workMs, logicMs);
                 }
                 catch (Exception e)
                 {

@@ -973,6 +973,39 @@ namespace DPTDOOM2D.Game
         public static int Count { get { int n = 0; for (int i = 0; i < MaxMn; ++i) if (mn[i].T != 0) ++n; return n; } }
 
         /// <summary>
+        /// Removes every monster from the level, and returns how many went.
+        ///
+        /// A debug action, not a gameplay one: it clears the array rather than killing
+        /// each monster through the normal damage path, because a death animation that
+        /// spawns debris is exactly what you do not want when you are about to look at
+        /// something else. Barrels and corpses count as monsters here — they occupy the
+        /// same array — which is what makes the level genuinely empty afterwards.
+        /// </summary>
+        public static int KillAll()
+        {
+            int killed = 0;
+
+            for (int i = 0; i < MaxMn; ++i)
+            {
+                if (mn[i].T == 0) continue;
+
+                mn[i].T = 0;
+                ++killed;
+            }
+
+            // The collision map still holds the monsters that were just removed, and
+            // a stale blocker is a wall the player walks into for no visible reason.
+            // Rebuilding it is the same two calls Game.Start makes.
+            if (killed > 0)
+            {
+                Bmap.Clear(Bmap.Monster);
+                Mark();
+            }
+
+            return killed;
+        }
+
+        /// <summary>
         /// Feeds every live monster's position and health into a checksum.
         ///
         /// A desync shows up here first: two machines that disagree about a monster

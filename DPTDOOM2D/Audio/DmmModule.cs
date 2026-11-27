@@ -139,7 +139,15 @@ namespace DPTDOOM2D.Audio
 
             // ---- patterns ----------------------------------------------------
             var patterns = new List<XmModule.XmPattern>();
-            var order = new List<byte>();
+
+            // One entry per DMM pattern: the XM patterns it was split into. A DMM
+            // pattern is up to 256 ticks *per channel* and routinely runs to 704, so
+            // it does not fit one XM pattern and is cut into several. Keeping only
+            // the first of them — which is what this did — threw away everything past
+            // row 256 of every pattern: two thirds of a typical song, and the part
+            // that was left played as a short loop, so a track appeared to repeat
+            // itself. The whole point of an order list is that it can name every one.
+            var order = new List<byte[]>();
 
             int note = 0;
             for (int p = 0; p < patternCount && note < noteCount; ++p)
@@ -149,41 +157,84 @@ namespace DPTDOOM2D.Audio
                 if (length <= 0) length = 1;
 
                 int first = patterns.Count;
-                BuildPatterns(module, events, length, patterns);
+                int made = BuildPatterns(module, events, length, patterns);
 
-                if (first < 256) order.Add((byte)first);
+                var sub = new byte[made];
+                for (int k = 0; k < made; ++k) sub[k] = (byte)(first + k);
+
+                order.Add(sub);
             }
 
             module.Patterns = patterns.ToArray();
 
-            // The DMM order list is authoritative when it is present; 255 means
-            // "restart at the entry after this one", which is the loop point.
+            // ---- order list --------------------------------------------------
+            //
+            // The DMM sequence is a program, not a playlist: 255 is a jump, and the
+            // byte after it is the offset from the start of the sequence to jump to.
+            // Reading 255 as "the end" and then carrying on with the next byte — which
+            // is what this did — played that offset as if it were a block number, so a
+            // sequence of "0 1 255 0" became "0 1 0" and the first block was heard
+            // twice before the loop. That is the doubled music.
             module.Length = 0;
             module.RestartPosition = 0;
 
-            bool ordered = false;
+            // Where each sequence position ended up in the module's order list, so a
+            // jump target can be translated.
+            var atSeq = new int[orders.Count + 1];
+            for (int i = 0; i < atSeq.Length; ++i) atSeq[i] = -1;
+
+            bool looped = false;
+
             for (int i = 0; i < orders.Count; ++i)
             {
                 int value = orders[i];
+
                 if (value == 255)
                 {
-                    module.RestartPosition = module.Length;
-                    ordered = true;
-                    continue;
+                    // Jump: the next byte is the target offset. The jump ends the
+                    // linear part of the song, so nothing after it is added.
+                    int target = i + 1 < orders.Count ? orders[i + 1] : 0;
+
+                    module.RestartPosition = target < atSeq.Length && atSeq[target] >= 0
+                        ? atSeq[target]
+                        : 0;
+
+                    looped = true;
+                    break;
                 }
 
-                if (value >= patternCount) continue;
+                if (value >= order.Count) continue;
                 if (module.Length >= 256) break;
 
-                // Map the DMM pattern to its first XM pattern.
-                if (value < order.Count) module.Orders[module.Length++] = order[value];
+                atSeq[i] = module.Length;
+
+                // Every sub-pattern of the DMM block, in the order they were cut.
+                byte[] sub = order[value];
+
+                for (int k = 0; k < sub.Length; ++k)
+                {
+                    if (module.Length >= 256) break;
+                    module.Orders[module.Length++] = sub[k];
+                }
             }
 
-            if (!ordered || module.Length == 0)
+            if (!looped || module.Length == 0)
             {
-                // No usable order list: play the patterns in sequence.
-                module.Length = Math.Min(order.Count, 256);
-                for (int i = 0; i < module.Length; ++i) module.Orders[i] = order[i];
+                // No jump in the sequence: play it once and loop from the start.
+                if (module.Length == 0)
+                {
+                    for (int i = 0; i < order.Count; ++i)
+                    {
+                        byte[] sub = order[i];
+
+                        for (int k = 0; k < sub.Length; ++k)
+                        {
+                            if (module.Length >= 256) break;
+                            module.Orders[module.Length++] = sub[k];
+                        }
+                    }
+                }
+
                 module.RestartPosition = 0;
             }
 
@@ -251,12 +302,25 @@ namespace DPTDOOM2D.Audio
             return longest;
         }
 
-        /// <summary>Splits a pattern timeline into XM patterns of at most 256 rows.</summary>
-        private static void BuildPatterns(XmModule module, List<Event> events, int length,
+        /// <summary>
+        /// Splits a pattern timeline into XM patterns of at most 256 rows, and returns
+        /// how many it added.
+        ///
+        /// The caller needs the count because every one of them has to be named in the
+        /// order list: a sub-pattern that is not named is music the player never hears.
+        /// </summary>
+        private static int BuildPatterns(XmModule module, List<Event> events, int length,
             List<XmModule.XmPattern> patterns)
         {
             int patternCount = (length + MaxRowsPerPattern - 1) / MaxRowsPerPattern;
             if (patternCount < 1) patternCount = 1;
+
+            // An XM pattern index is a byte, so the module cannot hold more than 256.
+            // A malformed DMM pattern claiming hours of length would otherwise wrap
+            // the index and play a random pattern instead of the tail of the song.
+            int room = 256 - patterns.Count;
+            if (patternCount > room) patternCount = room;
+            if (patternCount <= 0) return 0;
 
             var made = new XmModule.XmPattern[patternCount];
             for (int i = 0; i < patternCount; ++i)
@@ -314,6 +378,8 @@ namespace DPTDOOM2D.Audio
             if (usedRows > 0 && usedRows < MaxRowsPerPattern) made[patternCount - 1].Rows = usedRows;
 
             for (int i = 0; i < patternCount; ++i) patterns.Add(made[i]);
+
+            return patternCount;
         }
 
         /// <summary>
