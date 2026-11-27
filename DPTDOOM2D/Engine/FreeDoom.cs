@@ -304,15 +304,26 @@ namespace DPTDOOM2D.Engine
 
         // ---- pictures -------------------------------------------------------
 
+        /// <summary>
+        /// The lump a Doom2D sprite is converted from, by name. For checks.
+        ///
+        /// The rotation a sprite comes from is not something a finished WAD can be
+        /// asked about — the picture is resized and recoloured, and a front view
+        /// downscaled to eighteen pixels wide looks a lot like a profile. So the
+        /// converter reports its choice instead, and the check compares that.
+        /// </summary>
+        public static string RotationSource(string doomPath, string spriteName)
+        {
+            var source = new DoomWad(doomPath);
+
+            int lump = FindRotation(source, spriteName);
+            return lump < 0 ? null : source.NameOf(lump);
+        }
+
         private static byte[] ConvertSprite(DoomWad source, DoomWad reference, string name,
             byte[] paletteMap, Report report)
         {
-            // Doom2D stores two rotations in one lump: TROOA1A2 is rotation 1, and
-            // rotation 2 is the same picture mirrored. Doom stores them separately, so
-            // the first six characters name the source.
-            string from = name.Length == 8 ? name.Substring(0, 6) : name;
-
-            int lump = source.Find(from);
+            int lump = FindRotation(source, name);
             if (lump < 0) { ++report.SpritesCopied; return null; }
 
             DoomImage picture = DoomGfx.ReadPatch(source.Segment(lump));
@@ -326,6 +337,56 @@ namespace DPTDOOM2D.Engine
 
             ++report.SpritesConverted;
             return DoomGfx.ToVgaImage(sized);
+        }
+
+        /// <summary>
+        /// The Doom lump whose picture is the second rotation of a Doom2D sprite.
+        ///
+        /// Doom2D stores two rotations in one lump: TROOA1A2 holds rotation 1, and
+        /// rotation 2 is that same picture mirrored at draw time (Vga.Spr2). Rotation
+        /// 1 is therefore the **profile** — the one a side view uses — because its
+        /// mirror is the other side.
+        ///
+        /// Doom stores all eight rotations separately, and rotation 1 is the one facing
+        /// the camera. Copying it made every monster in FreeDooM2D stare straight ahead
+        /// while walking left and right: the game mirrored a front view, which looks
+        /// like a monster sliding sideways. Rotation 3 is the side view, and Doom's own
+        /// convention already stores it with 7 as its mirror — exactly the pair Doom2D
+        /// wants.
+        ///
+        /// Falls back to the front view for the single-rotation frames (I, J, K, L and
+        /// the like), where Doom has only rotation 0 and there is no profile to take.
+        /// </summary>
+        private static int FindRotation(DoomWad source, string name)
+        {
+            // TROOA1A2 -> base TROO, frame A; TROOI0 -> base TROO, frame I.
+            if (name.Length < 6) return source.Find(name);
+
+            string baseName = name.Substring(0, 4);
+            char frame = name[4];
+
+            // Doom's side view, in the spellings a WAD may use. FreeDoom pairs the
+            // mirror images into one lump the way Doom2D does ("TROOA3A7"), so the
+            // plain "TROOA3" is not there; a WAD built by Doom's own tools has the two
+            // rotations separately. Try the paired form first, then either half.
+            string[] order =
+            {
+                baseName + frame + "3A7",
+                baseName + frame + "3",
+                baseName + frame + "7",
+                baseName + frame + "1",     // the front view: wrong, but better than nothing
+                baseName + frame + "5"
+            };
+
+            for (int i = 0; i < order.Length; ++i)
+            {
+                int id = source.Find(order[i]);
+                if (id >= 0) return id;
+            }
+
+            // A pack with unusual names: take whatever the old rule found.
+            string from = name.Length == 8 ? name.Substring(0, 6) : name;
+            return source.Find(from);
         }
 
         private static byte[] ConvertGlyph(DoomWad source, DoomWad reference, string name,

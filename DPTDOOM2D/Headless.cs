@@ -1829,6 +1829,39 @@ namespace DPTDOOM2D
                     + Path.GetFileName(temporary));
                 Console.WriteLine("  " + report.Summary());
 
+                // The rotation is the whole point of the side view. Doom2D keeps two
+                // rotations in one lump and mirrors the second at draw time, so the
+                // stored picture has to be the profile; Doom's rotation 1 is the one
+                // facing the camera. Copying it made every monster in FreeDooM2D stare
+                // straight ahead while walking sideways, which reads as a bug in the
+                // port rather than in the conversion.
+                string[][] expected =
+                {
+                    new[] { "TROOA1A2", "TROOA3A7" },   // paired in FreeDoom
+                    new[] { "POSSA1A2", "POSSA3" },     // separate
+                    new[] { "SARGA1A2", "SARGA3A7" }
+                };
+
+                for (int i = 0; i < expected.Length; ++i)
+                {
+                    string got = Engine.FreeDoom.RotationSource(doomPath, expected[i][0]);
+
+                    if (got == null)
+                    {
+                        Console.Error.WriteLine("fdcheck: для " + expected[i][0]
+                            + " не нашлось картинки");
+                        return 1;
+                    }
+
+                    // Rotation 3 or 7 is the side view; rotation 1 is the front.
+                    if (got.IndexOf('3') < 0 && got.IndexOf('7') < 0)
+                    {
+                        Console.Error.WriteLine("fdcheck: " + expected[i][0] + " взят из "
+                            + got + " — это не профиль");
+                        return 1;
+                    }
+                }
+
                 // A set that converted no music at all is not a free set: it would be
                 // carrying the reference's soundtrack. That is exactly what happened
                 // while the converter only knew MUS and FreeDoom ships MIDI, and it was
