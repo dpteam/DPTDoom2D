@@ -135,6 +135,13 @@ namespace DPTDOOM2D
                     Boot();
                     return Headless.AiDoomCheck(checkSeed);
                 }
+                if (args[i] == "--aimap" && i + 3 < args.Length)
+                {
+                    uint mapSeed = 1;
+                    uint.TryParse(args[i + 1], out mapSeed);
+
+                    return Headless.AiMap(mapSeed, int.Parse(args[i + 2]), args[i + 3]);
+                }
                 if (args[i] == "--debugcheck")
                 {
                     Boot();

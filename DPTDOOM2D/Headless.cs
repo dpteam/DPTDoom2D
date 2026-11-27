@@ -1666,6 +1666,54 @@ namespace DPTDOOM2D
             return 0;
         }
 
+        /// <summary>
+        /// --aimap &lt;seed&gt; &lt;index&gt; &lt;out.txt&gt;: one generated level as text.
+        ///
+        /// A picture of the level answers "why is the exit not reachable" in one look,
+        /// where reading the carving code answers it in an afternoon. It is also the
+        /// fastest way to see what the generator actually produces without launching
+        /// the game.
+        /// </summary>
+        public static int AiMap(uint seed, int index, string output)
+        {
+            if (index < 1 || index > Engine.AiLevels.Count)
+            {
+                Console.Error.WriteLine("aimap: индекс 1.." + Engine.AiLevels.Count);
+                return 1;
+            }
+
+            MapFile level = Engine.AiLevels.Build(seed, index);
+            Engine.AiLevels.Dump(level, output);
+
+            int startX = -1, startY = -1, exitX = -1, exitY = -1;
+
+            for (int i = 0; i < level.Things.Count; ++i)
+                if (level.Things[i].Type == Game.ThingType.Plr1)
+                {
+                    startX = level.Things[i].X / 8;
+                    startY = level.Things[i].Y / 8;
+                    break;
+                }
+
+            for (int i = 0; i < level.Switches.Count; ++i)
+                if (level.Switches[i].Type == Game.SwType.Exit)
+                {
+                    exitX = level.Switches[i].X;
+                    exitY = level.Switches[i].Y;
+                    break;
+                }
+
+            bool ok = startX >= 0 && exitX >= 0
+                && Engine.AiLevels.Reaches(level, startX, startY, exitX, exitY);
+
+            Console.WriteLine("aimap: MAP" + index + " -> " + output
+                + ", старт " + startX + "," + startY
+                + ", выход " + exitX + "," + exitY
+                + ", проходим: " + (ok ? "да" : "нет"));
+
+            return ok ? 0 : 1;
+        }
+
         public static int AiDoomCheck(uint seed)
         {
             string temporary = Path.Combine(Path.GetTempPath(), "aidoom2d-check.wad");
@@ -1673,6 +1721,54 @@ namespace DPTDOOM2D
             try
             {
                 if (AiDoomBuild(seed, temporary) != 0) return 1;
+
+                // Can the level be finished? A generated map that loads, renders and
+                // runs is not the same as a map a player can walk across: the exit can
+                // sit in a room the corridors never reach. Nothing else checks this,
+                // and it was true of every level for a while — the rooms were joined
+                // on paper, and the vertical corridors were two cells wide, which the
+                // player's eight-pixel radius does not fit through.
+                for (int map = 1; map <= Engine.AiLevels.Count; ++map)
+                {
+                    MapFile level = Engine.AiLevels.Build(seed, map);
+
+                    int startX = -1, startY = -1, exitX = -1, exitY = -1;
+
+                    for (int i = 0; i < level.Things.Count; ++i)
+                        if (level.Things[i].Type == Game.ThingType.Plr1)
+                        {
+                            // A thing's position is in pixels, a switch's in cells —
+                            // the format inherited both from the original and they
+                            // never agreed. Mixing them up here made the check report
+                            // every level as broken, at a start point outside the map.
+                            startX = level.Things[i].X / 8;
+                            startY = level.Things[i].Y / 8;
+                            break;
+                        }
+
+                    for (int i = 0; i < level.Switches.Count; ++i)
+                        if (level.Switches[i].Type == Game.SwType.Exit)
+                        {
+                            exitX = level.Switches[i].X;
+                            exitY = level.Switches[i].Y;
+                            break;
+                        }
+
+                    if (startX < 0 || exitX < 0)
+                    {
+                        Console.Error.WriteLine("aicheck: MAP" + map
+                            + " без старта или без выхода");
+                        return 1;
+                    }
+
+                    if (!Engine.AiLevels.Reaches(level, startX, startY, exitX, exitY))
+                    {
+                        Console.Error.WriteLine("aicheck: MAP" + map
+                            + " непроходим: от " + startX + "," + startY
+                            + " до выхода " + exitX + "," + exitY + " пути нет");
+                        return 1;
+                    }
+                }
 
                 long size = new FileInfo(temporary).Length;
 

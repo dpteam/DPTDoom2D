@@ -143,29 +143,15 @@ namespace DPTDOOM2D.Engine
                 }
             }
 
-            // A door frame where two rooms meet: the corridor is narrowed to one cell
-            // and that cell becomes a switch, which is how Doom2D makes a door.
-            for (int i = 0; i < rooms.Count; ++i)
-            {
-                if (rnd.Below(100) >= 35) continue;
-
-                int[] room = rooms[i];
-                int cx = room[0] + room[2] / 2;
-                int cy = room[1] + room[3] / 2;
-
-                var sw = new MapSwitch();
-                sw.X = (byte)cx;
-                sw.Y = (byte)cy;
-                sw.A = (byte)cx;
-                sw.B = (byte)cy;
-                sw.Type = Game.SwType.Door;
-                sw.Flags = 0x03;                // player and monster can press it
-                map.Switches.Add(sw);
-            }
-
             // Water in one room: the front layer names it, the engine tints it.
             int wetRoom = 1 + rnd.Below(rooms.Count - 2);
             Flood(map, rooms[wetRoom], rnd);
+
+            // No doors. This used to put a Door switch in the middle of a third of the
+            // rooms, which did nothing at all: the engine only operates a door on a
+            // cell whose type is 3, and the generator only ever writes 0 (open) and 1
+            // (wall). A switch that cannot be pressed is worse than no switch — it
+            // looks like a broken game rather than a simple level.
 
             // The player, in the first room.
             AddThing(map, rooms[0], Game.ThingType.Plr1, rnd);
@@ -204,6 +190,99 @@ namespace DPTDOOM2D.Engine
             return map;
         }
 
+        /// <summary>
+        /// Writes a level as text, one character per cell: '#' wall, '.' open.
+        ///
+        /// For diagnosing a generator: a picture of the level answers "why is the exit
+        /// not reachable" in one look, where reading the carving code answers it in an
+        /// afternoon.
+        /// </summary>
+        public static void Dump(MapFile map, string path)
+        {
+            var text = new System.Text.StringBuilder(Size * (Size + 2));
+
+            for (int y = 0; y < Size; ++y)
+            {
+                for (int x = 0; x < Size; ++x)
+                    text.Append(Blocked(map.Type[y * Size + x]) ? '#' : '.');
+
+                text.Append('\n');
+            }
+
+            System.IO.File.WriteAllText(path, text.ToString());
+        }
+
+        /// <summary>
+        /// True when the player can walk from the start to the exit.
+        ///
+        /// The test mirrors the engine's collision, not an idea about maps: the player
+        /// is eight pixels wide, cells are eight pixels, and <c>Misc.CanStand</c> checks
+        /// the row he is on from <c>(x-r)</c> to <c>(x+r)</c>. That is three cells wide
+        /// and one cell tall — which is why a corridor two cells wide is passable
+        /// sideways and impassable up and down. A generator that only reasons about
+        /// "there is a corridor" produces exactly that: a level whose rows are joined
+        /// on paper and not in the game.
+        /// </summary>
+        public static bool Reaches(MapFile map, int startX, int startY, int targetX, int targetY)
+        {
+            var seen = new bool[Size * Size];
+            var queue = new Queue<int>();
+
+            if (!Standable(map, startX, startY)) return false;
+
+            int from = startY * Size + startX;
+            seen[from] = true;
+            queue.Enqueue(from);
+
+            while (queue.Count > 0)
+            {
+                int at = queue.Dequeue();
+                int x = at % Size, y = at / Size;
+
+                if (x == targetX && y == targetY) return true;
+
+                Step(map, seen, queue, x - 1, y);
+                Step(map, seen, queue, x + 1, y);
+                Step(map, seen, queue, x, y - 1);
+                Step(map, seen, queue, x, y + 1);
+            }
+
+            return false;
+        }
+
+        private static void Step(MapFile map, bool[] seen, Queue<int> queue, int x, int y)
+        {
+            if (x < 0 || y < 0 || x >= Size || y >= Size) return;
+
+            int at = y * Size + x;
+            if (seen[at]) return;
+            if (!Standable(map, x, y)) return;
+
+            seen[at] = true;
+            queue.Enqueue(at);
+        }
+
+        /// <summary>
+        /// Can the player stand centred on this cell?
+        ///
+        /// Same span as <c>Misc.CanStand</c>: radius eight pixels over eight-pixel
+        /// cells, so one cell either side on the row he is on.
+        /// </summary>
+        public static bool Standable(MapFile map, int x, int y)
+        {
+            if (x < 1 || y < 0 || x >= Size - 1 || y >= Size) return false;
+
+            for (int i = x - 1; i <= x + 1; ++i)
+                if (Blocked(map.Type[y * Size + i])) return false;
+
+            return true;
+        }
+
+        private static bool Blocked(byte cell)
+        {
+            return cell == Game.Cell.Wall || cell == Game.Cell.WallSwapped;
+        }
+
         /// <summary>Clears a rectangle: no wall texture and nothing solid.</summary>
         private static void Carve(MapFile map, int x, int y, int w, int h)
         {
@@ -223,46 +302,42 @@ namespace DPTDOOM2D.Engine
         }
 
         /// <summary>
-        /// Joins two rooms with a two-cell corridor.
+        /// Joins two rooms with an L-shaped corridor through their centres.
         ///
-        /// Two cells, not one: a one-cell corridor is passable but the player's sprite
-        /// is wider than a cell, and the original's own maps use two for the same
-        /// reason.
+        /// Three cells wide, not two. The player is eight pixels wide, cells are eight
+        /// pixels, and <c>Misc.CanStand</c> tests the row he is on from one cell left to
+        /// one cell right — so he occupies three cells across and needs three cells of
+        /// clearance. A two-cell corridor is passable sideways (the test only looks at
+        /// one row) and impassable up and down, which is why the levels were joined on
+        /// paper and not in the game: the horizontal corridors worked, the vertical
+        /// ones did not, and the exit sat in the bottom row.
+        ///
+        /// The path runs between the two room centres rather than between their edges,
+        /// so it always starts and ends inside a room. Routing edge to edge leaves a gap
+        /// whenever the rooms do not overlap on the other axis, and a corridor that
+        /// stops short of a room is the same as no corridor.
         /// </summary>
         private static void Connect(MapFile map, int[] a, int[] b, bool horizontal, AiArt.Rand rnd)
         {
+            int ax = a[0] + a[2] / 2;
+            int ay = a[1] + a[3] / 2;
+            int bx = b[0] + b[2] / 2;
+            int by = b[1] + b[3] / 2;
+
+            const int Width = 3;
+
+            // The first leg runs the way the rooms are arranged, the second the other
+            // way; which one comes first does not matter for reachability, only that
+            // both are carved.
             if (horizontal)
             {
-                // Overlap of the two rooms' vertical spans, so the corridor meets both.
-                int top = Math.Max(a[1], b[1]);
-                int bottom = Math.Min(a[1] + a[3], b[1] + b[3]);
-
-                if (bottom - top < 3) top = Math.Min(a[1] + a[3] / 2, b[1] + b[3] / 2) - 1;
-
-                int y = top + rnd.Below(Math.Max(1, bottom - top - 2));
-
-                int from = a[0] + a[2];
-                int to = b[0];
-
-                if (from > to) { int t = from; from = to; to = t; }
-
-                Carve(map, from, y, to - from, 2);
+                Carve(map, Math.Min(ax, bx), ay - 1, Math.Abs(bx - ax) + 1, Width);
+                Carve(map, bx - 1, Math.Min(ay, by), Width, Math.Abs(by - ay) + 1);
             }
             else
             {
-                int left = Math.Max(a[0], b[0]);
-                int right = Math.Min(a[0] + a[2], b[0] + b[2]);
-
-                if (right - left < 3) left = Math.Min(a[0] + a[2] / 2, b[0] + b[2] / 2) - 1;
-
-                int x = left + rnd.Below(Math.Max(1, right - left - 2));
-
-                int from = a[1] + a[3];
-                int to = b[1];
-
-                if (from > to) { int t = from; from = to; to = t; }
-
-                Carve(map, x, from, 2, to - from);
+                Carve(map, ax - 1, Math.Min(ay, by), Width, Math.Abs(by - ay) + 1);
+                Carve(map, Math.Min(ax, bx), by - 1, Math.Abs(bx - ax) + 1, Width);
             }
         }
 
