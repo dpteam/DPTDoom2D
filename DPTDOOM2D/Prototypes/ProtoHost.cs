@@ -60,10 +60,18 @@ namespace DPTDOOM2D.Prototypes
 
             prototype.Init();
 
-            using (var window = new Win32Window("DPT.DOOM 2D - " + Ascii(prototype.Title), 320, 200, scale, false))
+            using (var window = new Win32Window("DPT.DOOM 2D - " + Ascii(prototype.Title), 320, 200,
+                scale, Config.Fullscreen))
             using (var presenter = new Presenter(320, 200))
             {
-                window.Stretch = Win32Window.StretchMode.PixelPerfect;
+                // The prototype gets the same stretch mode the game was started with,
+                // not a hardcoded one. PixelPerfect is the right default for 320x200 —
+                // an integer factor keeps the pixels square — but a player who chose
+                // "fill the screen" in the game got letterboxed prototypes, which looks
+                // like the program is ignoring its own settings.
+                window.Stretch = Config.StretchMode;
+
+                bool fullscreen = Config.Fullscreen;
 
                 long tick = Stopwatch.GetTimestamp();
                 long tickLength = Stopwatch.Frequency / 30;   // the old timer was ~70 Hz; 30 is plenty
@@ -80,6 +88,15 @@ namespace DPTDOOM2D.Prototypes
 
                     if (Kbd.WasPressed(Kbd.SDLK_ESCAPE)) break;
 
+                    // F11 and the game's menu item do the same thing. A prototype has
+                    // no menu, so without a key it could only be fullscreen if it was
+                    // launched that way.
+                    if (Kbd.WasPressed(Kbd.SDLK_F11))
+                    {
+                        fullscreen = !fullscreen;
+                        window.SetFullscreen(fullscreen);
+                    }
+
                     try
                     {
                         prototype.Frame(frame);
@@ -89,6 +106,12 @@ namespace DPTDOOM2D.Prototypes
                         Log.Error("prototype " + prototype.Id + " failed at frame " + frame, e);
                         return 1;
                     }
+
+                    // A short hint at the start, because a prototype has no menu and
+                    // no documentation on screen: without it, F11 exists and nobody
+                    // knows. Three seconds is long enough to read and short enough not
+                    // to sit on top of the demo.
+                    if (frame < 90) Hint(frame);
 
                     presenter.Present(window);
                     ++frame;
@@ -112,6 +135,32 @@ namespace DPTDOOM2D.Prototypes
         }
 
         // ------------------------------------------------------------ helpers
+
+        /// <summary>
+        /// The two keys every prototype answers to, in the corner of the screen.
+        ///
+        /// Drawn by the host rather than by each prototype: the keys belong to the
+        /// host, and a prototype that forgot to mention them would hide the only way
+        /// to leave the window without a title bar.
+        /// </summary>
+        private static void Hint(int frame)
+        {
+            const string text = "ESC EXIT   F11 FULLSCREEN";
+
+            // 4 pixels per glyph in the 3x5 font, plus the gap.
+            int width = text.Length * 4;
+            int x = 320 - width - 2;
+            int y = 200 - 8;
+
+            // A box behind it, so the text reads over whatever the demo draws. The
+            // colour is the darkest palette entry, which every palette has.
+            Vga.Clr(x - 1, width + 2, y - 1, 7, 0);
+
+            // A short fade in the last second, so it does not vanish mid-read.
+            if (frame > 60 && (frame & 2) == 0) return;
+
+            Text(x, y, text, 255);
+        }
 
         /// <summary>
         /// Window titles cannot carry the Cyrillic and typographic characters the

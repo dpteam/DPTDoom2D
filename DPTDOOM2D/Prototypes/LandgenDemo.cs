@@ -332,7 +332,7 @@ namespace DPTDOOM2D.Prototypes
             }
 
             ProtoHost.Text(4, 4, "LANDGEN", 255);
-            ProtoHost.Text(4, 190, "R - NEW WORLD   ESC - EXIT", 255);
+            ProtoHost.Text(4, 190, "R - NEW WORLD   ESC - EXIT   F11 - FULLSCREEN", 255);
         }
     }
 }

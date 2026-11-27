@@ -127,7 +127,7 @@ namespace DPTDOOM2D.Prototypes
             if (truba != null) Vga.Spr(0, 0, truba);
 
             ProtoHost.Text(4, 4, "TRUBA", 255);
-            ProtoHost.Text(4, 190, "ESC - EXIT", 255);
+            ProtoHost.Text(4, 190, "ESC - EXIT   F11 - FULLSCREEN", 255);
         }
     }
 }
