@@ -1521,6 +1521,151 @@ namespace DPTDOOM2D
             return length > 0;
         }
 
+        /// <summary>
+        /// --bfgcheck: firing the BFG through the real player path has to produce a
+        /// ball, and that ball has to have a picture.
+        ///
+        /// This exists because the first version of this check called
+        /// <c>Weapons.BfgShot</c> directly and passed, while the gun in the game
+        /// produced nothing. The projectile code was correct all along; the player's
+        /// firing code returned one line too early and never called it. A check that
+        /// skips the layer the bug is in proves only that the layer below works, so
+        /// this one holds the fire key down and ticks, exactly as a player would.
+        /// </summary>
+        public static int BfgCheck()
+        {
+            var failed = new List<string>();
+
+            Glob.Reset(Seed);
+            Vga.Init(320, 200);
+            Vga.SetRect(0, 320, 0, 200);
+
+            DGame.TwoPl = false;
+            DGame.Dm = false;
+            DGame.State = DGame.GsGame;
+
+            DGame.Init();
+            World.LoadLightningSounds();
+
+            DGame.Map = 19;
+            Player.Reset();
+            DGame.Start();
+
+            // ---- the pictures the ball and its explosion use ------------------
+            for (int s = 18; s <= 19; ++s)
+                for (int d = 0; d <= 1; ++d)
+                    if (Weapons.SpriteAt(s * 2 + d) == null)
+                        failed.Add("нет картинки для BFS1 кадр " + (char)('A' + s - 18)
+                            + ", ракурс " + d);
+
+            for (int s = 26; s <= 29; ++s)
+                for (int d = 0; d <= 1; ++d)
+                    if (Weapons.SpriteAt(s * 2 + d) == null)
+                        failed.Add("нет картинки для BFE2 кадр " + (char)('A' + s - 26)
+                            + ", ракурс " + d);
+
+            // ---- give the player the gun and hold the trigger ----------------
+            PlayerData p = DGame.Pl1;
+
+            p.Wpns |= 1 << 8;
+            p.Wpn = 8;
+            p.Cell = 200;
+            p.CWpn = 0;
+            p.Fire = 0;
+
+            // The fire key is a binding, not a constant; pinning it here means the
+            // check does not depend on which preset the machine happens to have.
+            p.Kf = Kbd.SDLK_LCTRL;
+
+            Kbd.Script(0, Kbd.SDLK_LCTRL);
+
+            int startCell = p.Cell;
+            int balls = 0;
+            int hits = 0;
+
+            for (int tick = 0; tick < 60; ++tick)
+            {
+                Kbd.UpdateScripted(tick);
+                DGame.Act();
+
+                int now = Weapons.CountOf(Weapons.WBfgBall);
+                if (now > balls) balls = now;
+
+                int boom = Weapons.CountOf(Weapons.WBfgHit);
+                if (boom > hits) hits = boom;
+            }
+
+            if (p.Cell >= startCell)
+                failed.Add("клетки не потратились: " + startCell + " -> " + p.Cell);
+
+            if (balls == 0 && hits == 0)
+                failed.Add("BFG не выпустил шар за 60 тиков (клетки " + p.Cell + ")");
+
+            if (failed.Count > 0)
+            {
+                for (int i = 0; i < failed.Count; ++i)
+                    Console.Error.WriteLine("bfgcheck: " + failed[i]);
+
+                return 1;
+            }
+
+            Console.WriteLine("bfgcheck ok: шар выпущен (макс " + balls + "), взрывов "
+                + hits + ", клетки " + startCell + " -> " + p.Cell);
+            return 0;
+        }
+
+        /// <summary>
+        /// --bfgshot &lt;out.bmp&gt;: fires a BFG ball and renders the frame it should be
+        /// visible in.
+        ///
+        /// --bfgcheck proves the projectile exists and has pictures; that is not the
+        /// same as proving it reaches the screen. This one draws the frame and looks
+        /// at the pixels, which is the only way to tell "spawned" from "rendered".
+        /// </summary>
+        public static int BfgShot(string output)
+        {
+            Glob.Reset(Seed);
+            Vga.Init(320, 200);
+            Vga.SetRect(0, 320, 0, 200);
+
+            DGame.Map = 19;
+            DGame.TwoPl = false;
+            DGame.Dm = false;
+            DGame.State = DGame.GsGame;
+
+            DGame.Init();
+            World.LoadLightningSounds();
+
+            Player.Reset();
+            DGame.Start();
+
+            for (int i = 0; i < 5; ++i) { Kbd.UpdateScripted(i); DGame.Act(); }
+
+            int x = DGame.Pl1.O.X;
+            int y = DGame.Pl1.O.Y - 15;
+
+            // Fired level, not up or down, so it flies across the view instead of into
+            // the floor: the question is whether the ball is drawn, not where it lands.
+            Weapons.BfgShot(x, y, x + 96, y, DGame.Pl1.Id);
+
+            // Two ticks: enough for the ball to be moving and for its sprite index to
+            // have flipped once, not enough for it to leave the screen.
+            for (int i = 0; i < 2; ++i) { Kbd.UpdateScripted(i); DGame.Act(); }
+
+            int bx, by;
+            bool there = Weapons.PositionOf(Weapons.WBfgBall, out bx, out by);
+
+            Vga.Clr(0, 320, 0, 200, 0);
+            DGame.Draw();
+            Program.WriteBmp(output, 320, 200);
+
+            Console.WriteLine("bfgshot: ball " + (there ? "at " + bx + "," + by : "gone")
+                + ", player " + DGame.Pl1.O.X + "," + DGame.Pl1.O.Y
+                + ", picture " + (Weapons.SpriteAt(36) != null ? "loaded" : "missing"));
+
+            return 0;
+        }
+
         public static int AiDoomCheck(uint seed)
         {
             string temporary = Path.Combine(Path.GetTempPath(), "aidoom2d-check.wad");

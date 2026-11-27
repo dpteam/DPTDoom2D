@@ -8,8 +8,8 @@ namespace DPTDOOM2D.Game
     {
         public const int MaxWpn = 300;
 
-        const int WNone = 0, WRocket = 1, WPlasma = 2, WAPlasma = 3, WBall1 = 4, WBall2 = 5,
-                  WBall7 = 6, WBfgBall = 7, WBfgHit = 8, WManf = 9, WRevf = 10, WFire = 11;
+        public const int WNone = 0, WRocket = 1, WPlasma = 2, WAPlasma = 3, WBall1 = 4, WBall2 = 5,
+                         WBall7 = 6, WBfgBall = 7, WBfgHit = 8, WManf = 9, WRevf = 10, WFire = 11;
 
         sealed class Weapon
         {
@@ -394,6 +394,48 @@ namespace DPTDOOM2D.Game
         {
             for (int i = 0; i < MaxWpn; ++i) if (wp[i].T == WNone) return i;
             return -1;
+        }
+
+        /// <summary>
+        /// How many projectiles of this type are alive, for the checks.
+        ///
+        /// The weapon array is private because nothing outside should poke at a
+        /// projectile; a counter is the smallest thing that lets a test ask "did it
+        /// spawn" without handing the whole array out.
+        /// </summary>
+        public static int CountOf(int type)
+        {
+            int n = 0;
+            for (int i = 0; i < MaxWpn; ++i) if (wp[i].T == type) ++n;
+            return n;
+        }
+
+        /// <summary>Where a projectile of this type is, or false when there is none.</summary>
+        public static bool PositionOf(int type, out int x, out int y)
+        {
+            for (int i = 0; i < MaxWpn; ++i)
+            {
+                if (wp[i].T != type) continue;
+
+                x = wp[i].O.X;
+                y = wp[i].O.Y;
+                return true;
+            }
+
+            x = y = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// The image a projectile index resolves to, for the checks.
+        ///
+        /// A projectile whose sprite index lands on a null image is invisible while
+        /// being perfectly alive: it flies, it hits, it makes a sound, and the player
+        /// sees nothing. That is not something a "does the game crash" test notices.
+        /// </summary>
+        public static VgaImage SpriteAt(int index)
+        {
+            return index >= 0 && index < spr.Length ? spr[index] : null;
         }
 
         public static void RocketShot(int x, int y, int xd, int yd, int o)

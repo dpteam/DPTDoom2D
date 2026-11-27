@@ -244,6 +244,15 @@ try
 		if ($LASTEXITCODE -ne 0) { Write-Host '  debug actions FAILED' -ForegroundColor Red; $failed++ }
 		else { Write-Host '  debug actions ok' -ForegroundColor DarkGray }
 
+		# The BFG, through the player's own firing code. The first version of this
+		# check called Weapons.BfgShot directly and passed while the gun in the game
+		# produced nothing: the projectile code was fine and simply never called,
+		# because the firing path returned one line early. Checking the layer below
+		# the bug proves only that the layer below works.
+		& $exe --bfgcheck 2>&1 | Out-Null
+		if ($LASTEXITCODE -ne 0) { Write-Host '  bfg fires FAILED' -ForegroundColor Red; $failed++ }
+		else { Write-Host '  bfg fires ok' -ForegroundColor DarkGray }
+
 		# The data set the launcher chose has to be the one the game boots on. The old
 		# check ran "--simulate -data doom2d", which is the default: it would have
 		# passed no matter what the loader did. --setcheck asks the same method the

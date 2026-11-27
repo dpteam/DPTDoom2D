@@ -197,8 +197,16 @@ namespace DPTDOOM2D.Game
                     }
                     return;
                 }
+
+                // The ball leaves on the tick the charge reaches 1, and this tick has
+                // to fall through to the dispatch below to do it. It used to return
+                // unconditionally here, which is a one-word difference from the
+                // original's "else return" and meant the BFG played its charge sound,
+                // spent forty cells, and produced nothing at all — no ball, no
+                // explosion, no damage. Nothing failed, because nothing was missing:
+                // the projectile code was correct and simply never called.
                 if (p.Fire == 1) p.CWpn = 12;
-                return;
+                else return;
             }
             else if (p.Wpn == 1)
             {

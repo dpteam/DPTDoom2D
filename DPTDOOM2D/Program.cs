@@ -149,6 +149,16 @@ namespace DPTDOOM2D
                     Boot();
                     return Headless.DmmCheck();
                 }
+                if (args[i] == "--bfgcheck")
+                {
+                    Boot();
+                    return Headless.BfgCheck();
+                }
+                if (args[i] == "--bfgshot" && i + 1 < args.Length)
+                {
+                    Boot();
+                    return Headless.BfgShot(args[i + 1]);
+                }
                 if (args[i] == "--freedoom" && i + 2 < args.Length)
                 {
                     Boot();
