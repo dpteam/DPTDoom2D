@@ -366,12 +366,19 @@ namespace DPTDOOM2D.Engine
             char frame = name[4];
 
             // Doom's side view, in the spellings a WAD may use. FreeDoom pairs the
-            // mirror images into one lump the way Doom2D does ("TROOA3A7"), so the
-            // plain "TROOA3" is not there; a WAD built by Doom's own tools has the two
-            // rotations separately. Try the paired form first, then either half.
+            // mirror images into one lump the way Doom2D does, and the pair repeats the
+            // frame letter: TROOB3B7, not TROOB3A7. Hardcoding the A was a bug that only
+            // frame A survived — every other frame of every animation fell back to the
+            // front view, so a monster looked right standing still and turned to face
+            // the camera the moment it started walking.
+            //
+            // The pair can be written either way round: the monsters use TROOB3B7 and
+            // the projectiles use MANFA7A3, which is the same two rotations descending.
+            // Both are tried, because the name is only a container for the pair.
             string[] order =
             {
-                baseName + frame + "3A7",
+                baseName + frame + "3" + frame + "7",
+                baseName + frame + "7" + frame + "3",
                 baseName + frame + "3",
                 baseName + frame + "7",
                 baseName + frame + "1",     // the front view: wrong, but better than nothing

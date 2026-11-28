@@ -1714,6 +1714,23 @@ namespace DPTDOOM2D
             return ok ? 0 : 1;
         }
 
+        /// <summary>
+        /// True when a source lump carries rotation 3 or 7 — the side view.
+        ///
+        /// The rotation digits are at positions 5 and 7 of an eight-character name; the
+        /// four-letter base can contain digits itself (BAL7), so searching the whole
+        /// name for a '3' or a '7' reports a false pass.
+        /// </summary>
+        private static bool IsSideView(string name)
+        {
+            if (name == null) return false;
+
+            if (name.Length >= 6 && (name[5] == '3' || name[5] == '7')) return true;
+            if (name.Length >= 8 && (name[7] == '3' || name[7] == '7')) return true;
+
+            return false;
+        }
+
         public static int AiDoomCheck(uint seed)
         {
             string temporary = Path.Combine(Path.GetTempPath(), "aidoom2d-check.wad");
@@ -1929,33 +1946,52 @@ namespace DPTDOOM2D
                 // rotations in one lump and mirrors the second at draw time, so the
                 // stored picture has to be the profile; Doom's rotation 1 is the one
                 // facing the camera. Copying it made every monster in FreeDooM2D stare
-                // straight ahead while walking sideways, which reads as a bug in the
-                // port rather than in the conversion.
-                string[][] expected =
+                // straight ahead while walking sideways.
+                //
+                // Every two-rotation lump in the reference set is checked, not a few
+                // hand-picked names. The first version of this listed three, and all
+                // three were frame A — which was exactly the one frame that worked.
+                // Frame A of a walking animation is a standing pose; the other seven
+                // fell back to the front view and nobody noticed.
+                int sideFrames = 0;
+                int frontFrames = 0;
+                string firstFront = null;
+
+                // Only the sprite range: the reference set also holds walls, flats and
+                // composite textures, whose names happen to look like sprites and are
+                // never converted as one.
+                for (int id = Wad.SStart + 1; id < Wad.SEnd; ++id)
                 {
-                    new[] { "TROOA1A2", "TROOA3A7" },   // paired in FreeDoom
-                    new[] { "POSSA1A2", "POSSA3" },     // separate
-                    new[] { "SARGA1A2", "SARGA3A7" }
-                };
+                    string name = Wad.GetResName(id);
+                    if (name == null || name.Length < 8) continue;
 
-                for (int i = 0; i < expected.Length; ++i)
+                    // A two-rotation lump: TROOA1A2. A single-rotation one ends in "0"
+                    // and has no profile to take.
+                    if (name[5] == '0' || name[7] == '0') continue;
+
+                    string got = Engine.FreeDoom.RotationSource(doomPath, name);
+                    if (got == null) continue;
+
+                    // The source must be a side view. The rotation digits sit at
+                    // positions 5 and 7 of an eight-character lump name; the four-letter
+                    // base may contain digits of its own (BAL7), so a substring search
+                    // would call anything in that set a profile.
+                    if (IsSideView(got)) ++sideFrames;
+                    else { ++frontFrames; if (firstFront == null) firstFront = name + " <- " + got; }
+                }
+
+                if (frontFrames > 0)
                 {
-                    string got = Engine.FreeDoom.RotationSource(doomPath, expected[i][0]);
+                    Console.Error.WriteLine("fdcheck: " + frontFrames + " кадров взяты "
+                        + "не из профиля, например " + firstFront);
+                    return 1;
+                }
 
-                    if (got == null)
-                    {
-                        Console.Error.WriteLine("fdcheck: для " + expected[i][0]
-                            + " не нашлось картинки");
-                        return 1;
-                    }
-
-                    // Rotation 3 or 7 is the side view; rotation 1 is the front.
-                    if (got.IndexOf('3') < 0 && got.IndexOf('7') < 0)
-                    {
-                        Console.Error.WriteLine("fdcheck: " + expected[i][0] + " взят из "
-                            + got + " — это не профиль");
-                        return 1;
-                    }
+                if (sideFrames < 10)
+                {
+                    Console.Error.WriteLine("fdcheck: профильных кадров всего " + sideFrames
+                        + " — проверка ничего не проверила");
+                    return 1;
                 }
 
                 // A set that converted no music at all is not a free set: it would be

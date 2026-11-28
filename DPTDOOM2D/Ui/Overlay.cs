@@ -35,14 +35,14 @@ namespace DPTDOOM2D.Ui
     {
         private static readonly string[] TabNames =
         {
-            "Monitor", "Stats", "Debug", "Video", "Audio", "Game", "Keys", "Log"
+            "Monitor", "Stats", "Debug", "Video", "Audio", "Keys", "Log"
         };
 
         // Tab indices as constants: the switch statements below are the only place
         // that knows what a number means, and an inserted tab used to renumber every
         // case in the file.
         private const int TabMonitor = 0, TabStats = 1, TabDebug = 2, TabVideo = 3,
-                          TabAudio = 4, TabGame = 5, TabKeys = 6, TabLog = 7;
+                          TabAudio = 4, TabKeys = 5, TabLog = 6;
 
         private readonly Win32Window window;
 
@@ -125,11 +125,12 @@ namespace DPTDOOM2D.Ui
         // action then applies: warping the moment the map number changes would lose
         // the level on a mistyped arrow key, and this tab is opened mid-level.
 
-        private const int DebugRows = 10;
+        private const int DebugRows = 13;
 
         private const int RowMap = 0, RowWarp = 1, RowExit = 2, RowMonster = 3,
                           RowSpawnMonster = 4, RowItem = 5, RowSpawnItem = 6,
-                          RowKillAll = 7, RowRefill = 8, RowReload = 9;
+                          RowKillAll = 7, RowRefill = 8, RowReload = 9,
+                          RowCheat = 10, RowFly = 11, RowImmortal = 12;
 
         /// <summary>Map the Warp row will go to.</summary>
         private int debugMap = 1;
@@ -154,6 +155,27 @@ namespace DPTDOOM2D.Ui
         /// </summary>
         private void RunDebug(int row, int direction)
         {
+            // The three toggles work outside a level as well: they are settings, not
+            // actions, and switching them on the title screen then starting a game is
+            // a normal thing to want. Everything else needs a level to act on.
+            switch (row)
+            {
+                case RowCheat:
+                    DGame.Cheat = !DGame.Cheat;
+                    AddLog("debug: читы в deathmatch " + (DGame.Cheat ? "вкл" : "выкл"));
+                    return;
+
+                case RowFly:
+                    Player.Fly = !Player.Fly;
+                    AddLog("debug: полёт " + (Player.Fly ? "вкл" : "выкл"));
+                    return;
+
+                case RowImmortal:
+                    Player.Immortal = !Player.Immortal;
+                    AddLog("debug: бессмертие " + (Player.Immortal ? "вкл" : "выкл"));
+                    return;
+            }
+
             if (!DebugActions.InGame)
             {
                 AddLog("debug: только во время игры");
@@ -283,7 +305,6 @@ namespace DPTDOOM2D.Ui
                 case TabDebug: return DebugRows;
                 case TabVideo: return 5;
                 case TabAudio: return 4;
-                case TabGame: return 3;
                 case TabKeys: return 2 + Controls.Actions.Length;
                 default: return 0;
             }
@@ -410,12 +431,6 @@ namespace DPTDOOM2D.Ui
                     {
                         AudioSystem.Mixer.Muted = !AudioSystem.Mixer.Muted;
                     }
-                    break;
-
-                case TabGame:
-                    if (Row == 0) DGame.Cheat = !DGame.Cheat;
-                    else if (Row == 1) Player.Fly = !Player.Fly;
-                    else if (Row == 2) Player.Immortal = !Player.Immortal;
                     break;
 
                 case TabKeys:
@@ -554,7 +569,6 @@ namespace DPTDOOM2D.Ui
                 case TabDebug: DrawDebug(dc, l, contentX, contentY, contentW, contentH, accent, text); break;
                 case TabVideo: DrawVideo(dc, l, contentX, contentY, contentW, accent, text); break;
                 case TabAudio: DrawAudio(dc, l, contentX, contentY, contentW, accent, text); break;
-                case TabGame: DrawGame(dc, l, contentX, contentY, contentW, accent, text); break;
                 case TabKeys: DrawKeys(dc, l, contentX, contentY, contentW, contentH, accent, text); break;
                 case TabLog: DrawLog(dc, l, contentX, contentY, contentW, contentH, text); break;
             }
@@ -771,7 +785,8 @@ namespace DPTDOOM2D.Ui
             {
                 "Map", "Warp to map", "Exit level",
                 "Monster", "Spawn monster", "Item", "Spawn item",
-                "Kill all monsters", "Refill player", "Reload level"
+                "Kill all monsters", "Refill player", "Reload level",
+                "Cheats in deathmatch", "Fly", "Immortal"
             };
 
             string[] values =
@@ -785,7 +800,10 @@ namespace DPTDOOM2D.Ui
                 "run \u2192",
                 "run \u2192",
                 "run \u2192",
-                "run \u2192"
+                "run \u2192",
+                DGame.Cheat ? "on" : "off",
+                Player.Fly ? "on" : "off",
+                Player.Immortal ? "on" : "off"
             };
 
             int lineHeight = l.LineHeight + 4;
@@ -843,6 +861,9 @@ namespace DPTDOOM2D.Ui
                 case RowKillAll: return "remove every monster from the level";
                 case RowRefill: return "100 hp, 100 armour, all weapons and keys, full ammo";
                 case RowReload: return "restart the level you are on";
+                case RowCheat: return "allow the cheat codes in a deathmatch";
+                case RowFly: return "fly through walls and ceilings";
+                case RowImmortal: return "take no damage";
                 default: return "";
             }
         }
@@ -868,18 +889,6 @@ namespace DPTDOOM2D.Ui
                 Music.MusVol.ToString(),
                 Music.Describe(Music.Current),
                 AudioSystem.Mixer.Muted ? "on" : "off"
-            };
-
-            DrawRows(dc, l, x, y, width, labels, values, accent, text);
-        }
-
-        private void DrawGame(IntPtr dc, Layout l, int x, int y, int width, uint accent, uint text)
-        {
-            string[] labels = { "Cheats in deathmatch", "Fly", "Immortal" };
-            string[] values = {
-                DGame.Cheat ? "on" : "off",
-                Player.Fly ? "on" : "off",
-                Player.Immortal ? "on" : "off"
             };
 
             DrawRows(dc, l, x, y, width, labels, values, accent, text);
