@@ -24,7 +24,7 @@ namespace DPTDOOM2D.Shared
         public const string Name = "DPT.DOOM 2D";
 
         /// <summary>The version, without a leading 'v'.</summary>
-        public const string Version = "2.2.0";
+        public const string Version = "2.3.0";
 
         /// <summary>Name and version together, for banners and About screens.</summary>
         public const string Title = Name + " v" + Version;

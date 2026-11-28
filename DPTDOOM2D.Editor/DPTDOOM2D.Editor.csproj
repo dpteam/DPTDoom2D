@@ -11,7 +11,7 @@
     <Product>DPT.DOOM 2D</Product>
     <Company>DartPower Team</Company>
     <Copyright>Copyright (C) DartPower Team.</Copyright>
-    <Version>2.2.0</Version>
+    <Version>2.3.0</Version>
     <ApplicationIcon>..\resources\dptdoom2d.ico</ApplicationIcon>
     <!-- The framebuffer becomes a bitmap through a raw pointer: one lookup per
          pixel, which is what makes redrawing the map feel instant. -->

@@ -10,7 +10,7 @@
     <Product>DPT.DOOM 2D</Product>
     <Company>DartPower Team</Company>
     <Copyright>Copyright (C) DartPower Team.</Copyright>
-    <Version>2.2.0</Version>
+    <Version>2.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net40'">

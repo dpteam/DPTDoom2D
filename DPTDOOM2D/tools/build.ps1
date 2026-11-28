@@ -362,6 +362,30 @@ try
 			& $exe -file $modPk3 --simulate 40 (Join-Path $tmp 'mod.bmp') 1 2>&1 | Out-Null
 			if ($LASTEXITCODE -ne 0) { Write-Host '  pk3 load FAILED' -ForegroundColor Red; $failed++ }
 
+			# A mod that ships a track has to be heard. The bundled XM files in
+			# Data/Music are the default soundtrack and they used to win
+			# unconditionally, so a mod could ship music and the player would hear
+			# the default with nothing in the log to explain it.
+			$dmmSrc = Join-Path (Split-Path -Parent $root) 'refs\D2D_Also\oldprog\TC\DIGMUS'
+			if (Test-Path (Join-Path $dmmSrc 'M2.DMM')) {
+				Copy-Item (Join-Path $dmmSrc 'M2.DMM') (Join-Path $modSrc 'INTERMUS.dmm')
+				Copy-Item (Join-Path $dmmSrc 'COOLFLUT.DMI') (Join-Path $modSrc 'COOLFLUT.dmi')
+
+				Remove-Item $modPk3 -Force -ErrorAction SilentlyContinue
+				& $exe --modbuild $modPk3 $modSrc 2>&1 | Out-Null
+
+				$musicLog = & $exe -file $modPk3 --music INTERMUS 2>&1 | Out-String
+				if ($LASTEXITCODE -ne 0 -or $musicLog -notmatch 'from mod') {
+					Write-Host '  mod music does not override the bundled track FAILED' -ForegroundColor Red
+					$failed++
+				}
+				else { Write-Host '  mod music overrides the bundled track ok' -ForegroundColor DarkGray }
+
+				Remove-Item (Join-Path $modSrc 'INTERMUS.dmm') -Force -ErrorAction SilentlyContinue
+				Remove-Item (Join-Path $modSrc 'COOLFLUT.dmi') -Force -ErrorAction SilentlyContinue
+			}
+			else { Write-Host '  mod music skipped (no refs/D2D_Also DIGMUS)' -ForegroundColor DarkGray }
+
 			# A mod that ships actors.txt has to reach the actor registry through
 			# the same PK3 path, or the language only works for loose files.
 			Set-Content (Join-Path $modSrc 'actors.txt') 'actor Zombie { health 500 }' -Encoding ASCII

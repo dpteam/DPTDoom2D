@@ -98,6 +98,25 @@ namespace DPTDOOM2D.Engine
 
                 try
                 {
+                    // A mod's track first. The XM files in Data/Music are the default
+                    // soundtrack, and they used to win unconditionally — which meant a
+                    // mod could ship music and the player would still hear the default,
+                    // with nothing in the log to explain it. A mod is an explicit choice
+                    // about this run; the bundled files are what happens when nobody
+                    // chose anything.
+                    int modLump = FindModMusicLump(name);
+
+                    if (modLump >= 0)
+                    {
+                        XmModule fromMod = LoadLump(modLump);
+                        if (fromMod != null)
+                        {
+                            module = fromMod;
+                            player = new XmPlayer(module);
+                            return;
+                        }
+                    }
+
                     string path = ResolveTrackFile(name);
                     if (path != null)
                     {
@@ -141,6 +160,12 @@ namespace DPTDOOM2D.Engine
             int id = FindMusicLump(name);
             if (id < 0) return null;
 
+            return LoadLump(id);
+        }
+
+        /// <summary>Converts one DMM lump, by entry index, into a module.</summary>
+        private static XmModule LoadLump(int id)
+        {
             byte[] data = Wad.LoadRes(id);
             if (!DmmModule.LooksLikeDmm(data)) return null;
 
@@ -150,15 +175,22 @@ namespace DPTDOOM2D.Engine
         /// <summary>
         /// Finds a music lump by name, falling back to the transliterated spelling
         /// so "KONEC" finds the lump whose name is the CP1251 "Конец".
+        ///
+        /// A mod's track is looked for anywhere in the entry list, not just inside
+        /// M_START..M_END. The range exists to stop the game picking a texture with a
+        /// music-like name; a mod, however, adds its lumps *after* the base set's
+        /// M_END, so a range check alone means a mod can never replace a track. The
+        /// content decides instead: if the bytes are a DMM song, it is music.
         /// </summary>
         private static int FindMusicLump(string name)
         {
             int id = Wad.FindRes(name);
-            if (id > Wad.MStart && id < Wad.MEnd) return id;
-
-            if (Wad.MStart <= 0 || Wad.MEnd <= Wad.MStart) return -1;
+            if (id >= 0 && IsMusicLump(id)) return id;
 
             string wanted = Transliterate(name);
+
+            if (Wad.MStart <= 0 || Wad.MEnd <= Wad.MStart) return FindModTrack(wanted);
+
             for (int i = Wad.MStart + 1; i < Wad.MEnd; ++i)
             {
                 string lump = Wad.GetResName(i);
@@ -166,7 +198,53 @@ namespace DPTDOOM2D.Engine
                     return i;
             }
 
+            return FindModTrack(wanted);
+        }
+
+        /// <summary>A track shipped by a mod, found by its transliterated name.</summary>
+        private static int FindModTrack(string wanted)
+        {
+            for (int i = 0; i < Wad.ResCount; ++i)
+            {
+                if (!Wad.IsModResource(i)) continue;
+
+                string lump = Wad.GetResName(i);
+                if (!string.Equals(Transliterate(lump), wanted, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (IsMusicLump(i)) return i;
+            }
+
             return -1;
+        }
+
+        /// <summary>
+        /// The mod's own track for this name, or -1 when the mod does not ship one.
+        ///
+        /// Separate from <see cref="FindMusicLump"/> because the two answer different
+        /// questions: that one asks "where is this track", this one asks "did a mod
+        /// replace it". Only the second may override the bundled XM file.
+        /// </summary>
+        private static int FindModMusicLump(string name)
+        {
+            int id = Wad.FindRes(name);
+            if (id >= 0 && Wad.IsModResource(id) && IsMusicLump(id)) return id;
+
+            return FindModTrack(Transliterate(name));
+        }
+
+        /// <summary>
+        /// True when a lump holds a DMM song.
+        ///
+        /// Content, not position: the format is unmistakable ("DMM\0"), and asking the
+        /// bytes is what lets a mod's track be found wherever the loader put it.
+        /// </summary>
+        private static bool IsMusicLump(int id)
+        {
+            if (id < 0 || Wad.GetResLen(id) < 12) return false;
+
+            byte[] data = Wad.LoadRes(id);
+            return data != null && DmmModule.LooksLikeDmm(data);
         }
 
         private static byte[] ResolveSample(string sampleName)
@@ -397,7 +475,7 @@ namespace DPTDOOM2D.Engine
             get { lock (sync) { return module != null ? module.Name : ""; } }
         }
 
-        /// <summary>Where the current track came from: "file" or "wad".</summary>
+        /// <summary>Where the current track came from: "mod", "file" or "wad".</summary>
         public static string Source
         {
             get
@@ -405,6 +483,8 @@ namespace DPTDOOM2D.Engine
                 lock (sync)
                 {
                     if (module == null) return "none";
+                    if (FindModMusicLump(current) >= 0) return "mod";
+
                     return ResolveTrackFile(current) != null ? "file" : "wad";
                 }
             }

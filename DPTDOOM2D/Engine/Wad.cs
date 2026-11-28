@@ -35,6 +35,19 @@ namespace DPTDOOM2D.Engine
 
         public static int ResCount { get { return Entries.Count; } }
 
+        /// <summary>
+        /// True when a resource came from anything but the base data set: a -file, a
+        /// PK3 or a map pack.
+        ///
+        /// Load order matters for exactly this question. A mod is an explicit choice
+        /// about this run, so where two sources offer the same thing the mod wins — and
+        /// the engine has to be able to tell them apart to honour that.
+        /// </summary>
+        public static bool IsModResource(int id)
+        {
+            return id >= 0 && id < Entries.Count && Entries[id].File > 0;
+        }
+
         // F_allocres() markers.
         public static int DStart, DEnd, MStart, MEnd, SStart, SEnd;
 
